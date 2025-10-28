@@ -1,0 +1,31 @@
+[project]
+name = "hurst-regime-pullback"
+version = "0.1.0"
+description = "Reproducible Python implementation of the Hurst-Regime Pullback Strategy for index futures (ES, NQ, EMD, YM) — QuantConnect-ready research framework."
+readme = "README.md"
+authors = [
+    { name = "BlackswanQuants", email = "blackswan.quants@gmail.com" }
+]
+license = "MIT"
+requires-python = ">=3.12"
+
+# === Core libraries ===
+dependencies = [
+    "ipykernel>=7.0.1",
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.16.2",
+    "statsmodels>=0.14.5",
+    "arch>=6.3.0",          # For Hurst exponent and econometrics
+    "pyyaml>=6.0.2",        # For configs/base.yaml
+]
+
+[dependency-groups]
+dev = [
+    "black[jupyter]>=25.9.0",
+    "nb-clean>=4.0.1",
+    "pytest>=8.3.2",
+    "ruff>=0.6.9",
+]

@@ -1,1 +1,23 @@
-# placeholder for base config
+data:
+  clean_NQ: data/clean/NQ_clean.csv
+  clean_ES: data/clean/ES_clean.csv
+  clean_EMD: data/clean/EMD_clean.csv
+  clean_YM: data/clean/YM_clean.csv
+indicators:                              # setting the parameters used to compute the indexes
+  rsi_period: 2       
+  hurst_window: 20
+entry_thresholds:                        # setting the interval for RSI
+  rsi_low: 10.0
+  rsi_high: 20.0
+exits:                                   # setting the exit criteria
+  max_time_exit: false
+  max_time_in: 11
+  take_profit: false
+  max_profitable_closes: 5
+  RSI_exit: false
+ablation:
+  use_rsi: true
+  use_hurst: true
+  use_time_exit: true
+  use_RSI_exit: true
+  use_take_profit: true

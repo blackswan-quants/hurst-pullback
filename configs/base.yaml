@@ -11,7 +11,7 @@ entry_thresholds:                        # setting the interval for RSI
   rsi_high: 20.0
 exits:                                   # setting the exit criteria
   max_time_exit: false
-  max_time_in: 11
+  max_time: 11
   take_profit: false
   max_profitable_closes: 5
   RSI_exit: false

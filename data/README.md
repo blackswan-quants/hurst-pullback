@@ -1,6 +1,6 @@
 # Futures Datasets Summary
 
-All datasets contain **daily OHLCV** complet data about trading days of various futures.
+All datasets contain **daily OHLCV** complete data about trading days of various futures.
 
 ---
 

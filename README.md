@@ -35,3 +35,9 @@ Python dependencies and tools are managed with UV. This is how to install a libr
 uv add pandas  # code dependencies
 uv add --dev black # development tools
 ```
+
+
+## Configs
+
+All flags and input parameters are initialized in the file base.yaml
+

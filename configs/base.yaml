@@ -1,4 +1,5 @@
 data:
+  raw_NQ: data/raw/NQ.csv
   clean_NQ: data/clean/NQ_clean.csv
   clean_ES: data/clean/ES_clean.csv
   clean_EMD: data/clean/EMD_clean.csv

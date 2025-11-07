@@ -10,12 +10,14 @@ indicators:                              # setting the parameters used to comput
 entry_thresholds:                        # setting the interval for RSI
   rsi_low: 10.0
   rsi_high: 20.0
+  hurst_treshold: 0.5
 exits:                                   # setting the exit criteria
   max_time_exit: false
   max_time: 11
   take_profit: false
   max_profitable_closes: 5
   RSI_exit: false
+  max_bars_in_trade: false
 ablation:
   use_rsi: true
   use_hurst: true

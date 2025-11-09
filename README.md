@@ -35,3 +35,20 @@ Python dependencies and tools are managed with UV. This is how to install a libr
 uv add pandas  # code dependencies
 uv add --dev black # development tools
 ```
+
+
+## Configs
+
+All flags and input parameters are initialized in the file base.yaml. You need to import the file, this is an example:
+
+```sh
+import yaml
+
+yaml_path = Path().resolve().parent / "configs" / "base.yaml"
+with open(yaml_path, "r") as f:
+    config = yaml.safe_load(f)
+```
+Then you can use initialized variables using this syntax:
+```sh
+config["data"]["clean_NQ"]  # this line select the path of "clean_NQ" which is part of the subset data in the base file
+```

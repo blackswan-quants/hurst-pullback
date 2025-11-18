@@ -11,4 +11,10 @@ def should_exit(df: pd.DataFrame, i: int, params: dict) -> bool:
     Output:
     bool: True if signal-based exit is detected.
     """
-    pass
+    comp_rsi_thresh = params.get("composite_rsi_threshold")
+    curr_comp_rsi = df.loc[i, "composite_rsi"]
+
+    if(pd.isna(curr_comp_rsi)):
+        return False
+    
+    return curr_comp_rsi > comp_rsi_thresh

@@ -29,8 +29,8 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     """
     # getting strategy settings via strategy object
     lookback_rsi = strategy.get_cfg()['rsi_period']
-    short_composite_rsi = strategy.get_cfg()['UNDEFINED']
-    long_composite_rsi = strategy.get_cfg()['UNDEFINED']
+    short_composite_rsi = 2
+    long_composite_rsi = 24
     lookback_hurst = strategy.get_cfg()['hurst_window']
     ######
 
@@ -42,22 +42,15 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
 
 
     all_trades = []
-    trade = {
-        'open_date': "",         
-        'close_date': "",            
-        'entry_price' : 0.0,
-        'sell_price': 0.0,
-        'profit': 0.0,
-        'bars' : 0
-    }
+    trade = {}
 
     signal = 'flat'
+    df['rsi'] = rsi(df['close'] , lookback_rsi)
+    df['composite_rsi'] = composite_rsi(df['close'], short_composite_rsi , long_composite_rsi)
+    df['hurst'] = hurst_exponent(df['close'] , lookback_hurst)
 
     while i<len(df):
         # indicators calculation 
-        df.loc[i,'rsi'] = rsi(df['close'] , lookback_rsi)
-        df.loc[i,'composite_rsi'] = composite_rsi(df['close'], short_composite_rsi , long_composite_rsi)
-        df.loc[i,'hurst'] = hurst_exponent(df['close'] , lookback_hurst)
         #signal checking
         if signal == 'buy':
             #apriamo la posizione e inizializziamo il trade
@@ -65,14 +58,13 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
             trade['open_date'] = df.index[i]
             trade['entry_price'] = df.iloc[i, 'open']
             trade['bars']=1
-            trade['prof_x'] = 0
             signal = 'flat'
             
         
-        if signal == 'sell':
+        elif signal == 'sell':
             #chiudiamo la posizione e calcoliamo il profitto 
             df.loc[i,'open_position'] = False
-            trade['close_date'] = df.iloc[i].index
+            trade['close_date'] = df.index[i]
             trade['sell_price'] = df.iloc[i, 'open']
             trade['profit'] = (df.iloc[i,'open'] - trade['entry_price']) / trade['entry_price']
             signal = 'flat'
@@ -81,7 +73,8 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
 
 
         else:
-            df.loc[i,'open_position'] = df.loc[i-1, 'open_position']
+            if i!=0:
+                df.loc[i,'open_position'] = df.loc[i-1, 'open_position']
 
             if not trade.get('bars',0)==0:
                 trade['bars'] +=1
@@ -115,6 +108,5 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
 
 # mancano short e long parametri di composite_rsi in configs_yaml 
 
-# funzioni di dimarco completamente sbagliate
+# DONE funzioni di dimarco completamente sbagliate
 
-# prof x quindi si intende il numero di giorni consecutivi di profitto ?

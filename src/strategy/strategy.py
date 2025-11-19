@@ -21,11 +21,11 @@ class Strategy:
         """
         # Check for nested config values
         if 'exits' not in cfg or 'max_bars_in_trade' not in cfg.get('exits', {}):
-            logging.error("The parameters 'max_bars_in_trade' is NOT in the configuration dictionary!")
+            logging.warning("The parameters 'max_bars_in_trade' is NOT in the configuration dictionary!")
         if 'exits' not in cfg or 'max_profitable_closes' not in cfg.get('exits', {}):
-            logging.error("'max_profitable_closes' is NOT in configuration dictionary!")
+            logging.warning("'max_profitable_closes' is NOT in configuration dictionary!")
         if 'entry_thresholds' not in cfg or 'hurst_threshold' not in cfg.get('entry_thresholds', {}):
-            logging.error("Parameters dictionary does NOT contain hurst threshold!")
+            logging.warning("Parameters dictionary does NOT contain hurst threshold!")
         self.__cfg = cfg
     def get_cfg(self) -> dict:
         """
@@ -56,12 +56,17 @@ class Strategy:
         entry_cfg = self.__cfg.get('entry_thresholds', {})
         
         # RSI check
-        if 'rsi' in df.columns:
+        if 'rsi' in df.columns and 'rsi_low' in entry_cfg and 'rsi_high' in entry_cfg:
             if not long_entry(df, i, entry_cfg):
                 long_entry_check = False
                 logging.info("NO ENTRY: RSI indicators was NOT between 10 ad 20.")
         elif 'rsi' not in df.columns:
-            logging.error('Dataframe does NOT have RSI columns!')
+            logging.error('RSI is NOT in the Dataframe!')
+        elif 'rsi_low' not in entry_cfg:
+            logging.error('Parameters dictionary does NOT contain rsi_low! ')
+        elif 'rsi_high' not in entry_cfg:
+            logging.error('Parameters dictionary does NOT contain rsi_high! ')
+
 
         # Hurst check
         if 'hurst' in df.columns and 'hurst_threshold' in entry_cfg:
@@ -104,7 +109,7 @@ class Strategy:
             elif 'bars' not in state.keys():
                 logging.error("'bars' is NOT in state dictionary!")
             elif 'max_profitable_closes' not in exits_cfg:
-                logging.error("'max_profitable_closes' is NOT in configuration dictionary!")
+                logging.error("The parameters 'max_profitable_closes' is NOT in the configuration dictionary!")
             elif prof_exit(df, i, state, exits_cfg):
                 exit_position = True
                 logging.info(f"EXIT SIGNAL: the position was profitable for {exits_cfg['max_profitable_closes']} days.")                
@@ -113,6 +118,8 @@ class Strategy:
         if not exit_position:
             if 'composite_rsi' not in df.columns:
                 logging.error("'composite_rsi' is NOT in the dataframe!")
+            elif 'composite_rsi_threshold' not in exits_cfg:
+                logging.error("The parameters composite_rsi_threshold is NOT in the configuration dictionary!")
             elif rsi_exit(df, i, exits_cfg):
                 exit_position = True
                 logging.info(f"EXIT SIGNAL: the composite rsi signal was triggered!")

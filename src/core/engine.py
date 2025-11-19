@@ -1,6 +1,6 @@
 import pandas as pd
 from ..strategy.strategy import Strategy
-from indicators import *
+from .indicators import *
 import yaml 
 
 # strategy initialized in run backtest function
@@ -28,10 +28,11 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     }
     """
     # getting strategy settings via strategy object
-    lookback_rsi = strategy.get_cfg()['rsi_period']
+    cfg = strategy.get_cfg()
+    lookback_rsi = cfg['indicators']['rsi_period']
     short_composite_rsi = 2
     long_composite_rsi = 24
-    lookback_hurst = strategy.get_cfg()['hurst_window']
+    lookback_hurst = cfg['indicators']['hurst_window']
     ######
 
     i=0
@@ -45,18 +46,28 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     trade = {}
 
     signal = 'flat'
-    df['rsi'] = rsi(df['close'] , lookback_rsi)
-    df['composite_rsi'] = composite_rsi(df['close'], short_composite_rsi , long_composite_rsi)
-    df['hurst'] = hurst_exponent(df['close'] , lookback_hurst)
+    # Get close column - handle both 'Close' and 'close'
+    close_col = 'Close' if 'Close' in df.columns else 'close'
+    df['rsi'] = rsi(df[close_col], lookback_rsi)
+    df['composite_rsi'] = composite_rsi(df[close_col], short_composite_rsi, long_composite_rsi)
+    df['hurst'] = hurst_exponent(df[close_col], lookback_hurst)
+    print(df.tail(10))
 
     while i<len(df):
+        print("signal: ", signal)
         # indicators calculation 
         #signal checking
         if signal == 'buy':
             #apriamo la posizione e inizializziamo il trade
             df.loc[i,'open_position'] = True
             trade['open_date'] = df.index[i]
-            trade['entry_price'] = df.iloc[i, 'open']
+            # Access column by name - try both 'Open' and 'open'
+            if 'Open' in df.columns:
+                trade['entry_price'] = df.iloc[i]['Open']
+            elif 'open' in df.columns:
+                trade['entry_price'] = df.iloc[i]['open']
+            else:
+                trade['entry_price'] = df.iloc[i, 0]  # fallback to first column
             trade['bars']=1
             signal = 'flat'
             
@@ -65,8 +76,17 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
             #chiudiamo la posizione e calcoliamo il profitto 
             df.loc[i,'open_position'] = False
             trade['close_date'] = df.index[i]
-            trade['sell_price'] = df.iloc[i, 'open']
-            trade['profit'] = (df.iloc[i,'open'] - trade['entry_price']) / trade['entry_price']
+            # Access column by name - try both 'Open' and 'open'
+            if 'Open' in df.columns:
+                trade['sell_price'] = df.iloc[i]['Open']
+                exit_price = df.iloc[i]['Open']
+            elif 'open' in df.columns:
+                trade['sell_price'] = df.iloc[i]['open']
+                exit_price = df.iloc[i]['open']
+            else:
+                trade['sell_price'] = df.iloc[i, 0]  # fallback to first column
+                exit_price = df.iloc[i, 0]
+            trade['profit'] = (exit_price - trade['entry_price']) / trade['entry_price']
             signal = 'flat'
             all_trades.append(trade)
             trade = {}
@@ -87,6 +107,8 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
                 signal = strategy.entry_signal(df, i, trade) # trade non serve
                 signal = translator(signal,'entry')
 
+        if i >= len(df):
+            break
         i=i+1
     return all_trades
 

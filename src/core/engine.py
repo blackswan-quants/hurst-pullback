@@ -5,6 +5,14 @@ import yaml
 
 # strategy initialized in run backtest function
 
+def translator(signal : bool, info : str) -> str:
+    if not signal:
+        return 'flat'
+    if info=='exit':
+        return 'sell'
+    else:
+        return 'buy'
+
 def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     """
     Execute a vectorized backtest using the provided strategy object.
@@ -36,8 +44,7 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     all_trades = []
     trade = {
         'open_date': "",         
-        'close_date': "",       
-        'prof_x': 0.0,      
+        'close_date': "",            
         'entry_price' : 0.0,
         'sell_price': 0.0,
         'profit': 0.0,
@@ -78,17 +85,14 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
 
             if not trade.get('bars',0)==0:
                 trade['bars'] +=1
-            if trade.get('prof_x'):
-                if df.iloc[i,'open'] > trade['entry_price']:
-                    trade['prof_x'] +=1
-                else:
-                    trade['prof_x']=0
                 
             if df.loc[i,'open_position'] == True:
-                signal = strategy.exit_signal(df, i, trade) #trade non serve
+                signal = strategy.exit_signal(df, i, trade) 
+                signal = translator(signal, 'exit')
 
             elif df.loc[i,'open_position']==False:
-                signal = strategy.entry_signal(df, i, trade)
+                signal = strategy.entry_signal(df, i, trade) # trade non serve
+                signal = translator(signal,'entry')
 
         i=i+1
     return all_trades
@@ -104,7 +108,7 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
 
 # DOMANDE
 
-# non conviene modificare semplicemente il codice di gabri e restituire flat/buy/sell ?
+# DONE non conviene modificare semplicemente il codice di gabri e restituire flat/buy/sell ?
 
 # rsi e composite rsi dovrebbero restituire un valore unico -> vanno cambiate le funzioni
 # inoltre gli errori conviene handlarli dentro quelle funzioni non in engine

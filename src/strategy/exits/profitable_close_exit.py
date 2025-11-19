@@ -1,3 +1,4 @@
+from ntpath import join
 import pandas as pd
 
 def should_exit(df: pd.DataFrame, i: int, state: dict, params: dict) -> bool:
@@ -12,4 +13,18 @@ def should_exit(df: pd.DataFrame, i: int, state: dict, params: dict) -> bool:
     Output:
     bool: True if profit-close condition is satisfied.
     """
+
+    bars = state['bars']
+    max_profitable_closes = params['max_profitable_closes']
+
+    if bars < max_profitable_closes:
+        return False
+
+    for j in range(max_profitable_closes):
+        if df.loc[i-j, 'close'] < df.loc[i-j, 'open']:
+            return False
+        else:
+            continue
+    return True
+
     pass

@@ -7,11 +7,13 @@ data:
 indicators: # setting the parameters used to compute the indexes
   rsi_period: 2
   hurst_window: 20
+  short_composite_rsi: 2
+  long_composite_rsi: 24
 entry_thresholds: # setting the interval for RSI
   rsi_low: 10.0
   rsi_high: 20.0
   hurst_threshold: 0.5
-exits:                                   # setting the exit criteria
+exits: # setting the exit criteria
   max_time_exit: false
   max_time: 11
   take_profit: false

@@ -95,8 +95,8 @@ class Strategy:
         if not exit_position:
             if 'entry_price' not in state.keys():
                 logging.error("'entry_price' is NOT in state dictionary!")
-            elif 'prof_x' not in state.keys():
-                logging.error("'prof_x' is NOT in state dictionary!")
+            elif 'bars' not in state.keys():
+                logging.error("'bars' is NOT in state dictionary!")
             elif 'max_profitable_closes' not in self.__cfg.keys():
                 logging.error("'max_profitable_closes' is NOT in configuration dictionary!")
             elif prof_exit(df, i, state, self.__cfg):

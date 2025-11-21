@@ -11,5 +11,9 @@ def should_exit(df: pd.DataFrame, i: int, state: dict, params: dict) -> bool:
     params (dict): Contains ’max_profitable_closes’.
     Output:
     bool: True if profit-close condition is satisfied.
+    ...
     """
+    
+
+
     pass

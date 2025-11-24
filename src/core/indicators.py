@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-def rsi(series: pd.Series, period: int = 2) -> pd.Series:
+def rsi(series: pd.Series, period: int = 2) -> float:
     """
     Compute Relative Strength Index (RSI)
 
@@ -11,7 +11,7 @@ def rsi(series: pd.Series, period: int = 2) -> pd.Series:
         period (int): Lookback period (default=2)
 
     Returns
-        pd.Series: RSI values (0–100 range)
+        float: last RSI value
     """
     delta = series.diff() # computes daily returns
     gain = delta.clip(lower=0) # positive returns
@@ -30,7 +30,7 @@ def rsi(series: pd.Series, period: int = 2) -> pd.Series:
     RSI = 100 - (100 / (1 + RS))
     RSI = RSI.fillna(0)
 
-    return RSI
+    return float(RSI.iloc[-1])
 
 
 def hurst_local(series: pd.Series) -> float:
@@ -64,8 +64,8 @@ def hurst_local(series: pd.Series) -> float:
 
     # Range of segment sizes
     max_window = N // 2
-
     window_sizes = np.unique(np.floor(np.logspace(np.log10(4), np.log10(max_window), num=10)).astype(int))
+    
     RS_vals = []
     for w in window_sizes:
         if w >= N:
@@ -91,7 +91,7 @@ def hurst_local(series: pd.Series) -> float:
     return slope
 
 
-def hurst_exponent(series: pd.Series, window: int = 20) -> pd.Series:
+def hurst_exponent(series: pd.Series, window: int = 20) -> float:
     """
     Compute a rolling (moving-window) Hurst exponent series.
 
@@ -108,20 +108,32 @@ def hurst_exponent(series: pd.Series, window: int = 20) -> pd.Series:
 
     Returns
     -------
-    pd.Series
-        Rolling Hurst exponent values aligned to the input series. Values may be ``np.nan`` for
-        early timestamps where the window is not full or where the local estimator returns NaN.
-
+    float
+        Last rolling Hurst value (np.nan if window is not full).
+    
     Notes
     -----
     - The function delegates the actual R/S calculation to :func:`hurst_local`.
     - Caller may choose to post-process the output (e.g., smoothing or forward-filling) depending
       on downstream use-cases.
     """
-    H = series.rolling(window).apply(lambda x: hurst_local(x), raw=False)
+    H_series = series.rolling(window).apply(lambda x: hurst_local(x), raw=False)
+    H = float(H_series.iloc[-1])
     return H
 
-def composite_rsi(series: pd.Series, short: int, long: int) -> pd.Series:
+
+def _rsi_series(series: pd.Series, period: int) -> pd.Series:
+    """Internal helper: full RSI series (used by composite_rsi)."""
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    RS = avg_gain / avg_loss
+    RSI = 100 - (100 / (1 + RS))
+    return RSI.fillna(0)
+
+def composite_rsi(series: pd.Series, short: int, long: int) -> float:
     """
     Compute a composite (smoothed) short-term RSI by applying exponential smoothing over a
     longer timescale.
@@ -137,15 +149,14 @@ def composite_rsi(series: pd.Series, short: int, long: int) -> pd.Series:
 
     Returns
     -------
-    pd.Series
-        EWMA-smoothed short-term RSI. The returned series preserves NaNs from the underlying
-        short-term RSI until enough data is available.
+    float
+        Last value of the EWMA-smoothed short RSI
 
     Notes
     -----
     - This helper is commonly used in signal generation when a very short RSI is noisy and a
       smoothed version is preferred for rule-based entries/exits.
     """
-    short_rsi = rsi(series, short)
-    comp_rsi = short_rsi.ewm(span=long, adjust=False).mean()  # EWMA smoothing
-    return comp_rsi
+    short_rsi_series = _rsi_series(series, period=short)
+    comp_rsi_series = short_rsi_series.ewm(span=long, adjust=False).mean()
+    return float(comp_rsi_series.iloc[-1])

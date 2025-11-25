@@ -5,6 +5,8 @@ from src.strategy.strategy import Strategy
 import pandas as pd 
 import copy
 import logging
+from src.core.metrics import sharpe_ratio, max_drawdown, cagr
+
 
 def main() -> None:
     """
@@ -14,6 +16,9 @@ def main() -> None:
     2. Disable one component at a time.
     3. Re-run backtest and log performance differences.
     """
+    
+    
+    
     with open("./configs/base.yaml", "r") as f:
         config = yaml.safe_load(f)
 
@@ -29,16 +34,36 @@ def main() -> None:
         strategy = Strategy(cfg=tmp_config)
 
         res = run(df=df, strategy=strategy)
+
+        cum_factors = []
+        cum_factor = 1.0
+
+        for t in res:
+            p = t["profit"]
+        if p is None:
+            cum_factors.append(cum_factor)
+            continue
+        cum_factor *= (1 + p)
+        cum_factors.append(cum_factor)
+
+        metrics = {
+            "sharpe_ratio": sharpe_ratio((t["profit"] for t in res)),
+            "max_drawdown": max_drawdown(cum_factors),
+            "cagr": cagr(cum_factors)
+        }
         logging.info("-" * 50)
         logging.info("\nDISABLED feature: \t ", opt)
         out = {
             "disaled_feature": opt,
-            "all_trades": res
+            "all_trades": res,
+            "metrics": metrics
         }
         output.append(out)
         logging.info("-" * 50) 
         logging.info("\n\n- METRICS")
-        # metrics QUI
+        logging.info("\n sharpe ratio ->", metrics["sharpe_ratio"])
+        logging.info("\n max_drawdown ->", metrics["max_drawdown"])
+        logging.info("\n cagr ->", metrics["cagr"])
         logging.info("\n")
         logging.info("-" * 50) 
     

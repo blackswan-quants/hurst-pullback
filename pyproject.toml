@@ -21,6 +21,7 @@ dependencies = [
     "arch>=6.3.0", # For Hurst exponent and econometrics
     "pyyaml>=6.0.2", # For configs/base.yaml
     "gitpython>=3.1.45",
+    "pytest>=8.4.2",
 ]
 
 [dependency-groups]

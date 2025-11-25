@@ -17,4 +17,4 @@ def long_entry(df: pd.DataFrame, i: int, params: dict) -> bool:
     if(pd.isna(curr_rsi)): 
         return False 
     
-    return rsi_low <= curr_rsi <= rsi_high
+    return rsi_low <= curr_rsi and curr_rsi <= rsi_high

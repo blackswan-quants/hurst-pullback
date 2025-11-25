@@ -7,4 +7,12 @@ def should_exit(state: dict, params: dict) -> bool:
     Output:
     bool: True if max duration is reached.
     """
+
+    bars = state['bars']
+    max_bars = params['max_bars_in_trade']
+
+    if bars >= max_bars:
+        return True
+    else:
+        return False
     pass

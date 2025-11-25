@@ -33,13 +33,10 @@ def main() -> None:
         logging.info("\nDISABLED feature: \t ", opt)
         out = {
             "disaled_feature": opt,
-            "output": res
+            "all_trades": res
         }
         output.append(out)
-        logging.info("\n\n- GENERAL INFOs")
-        logging.info("\nequity -> ", res["equity"])
-        logging.info("\nn_trades -> ", res["n_trades"])
-        logging.info("\ntrades -> ", res["trades"])
+        logging.info("-" * 50) 
         logging.info("\n\n- METRICS")
         # metrics QUI
         logging.info("\n")

@@ -5,10 +5,19 @@ from src.strategy.strategy import Strategy
 import pandas as pd 
 import copy
 import logging
-from src.core.metrics import sharpe_ratio, max_drawdown, cagr
+from src.core.metrics import sharpe_ratio, max_drawdown, cagr, cumulative_return
+import numpy as np
+import matplotlib.pyplot as plt
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+    #filename = 'src/cli/ablation.log'    
+)
 
-def main() -> None:
+def run_ablation() -> list:
     """
     Run ablation tests to isolate component contributions.
     Steps:
@@ -25,6 +34,8 @@ def main() -> None:
     df = pd.read_csv("./" + config['data']['clean_ES']) 
     #df = load_data(config['data']['clean_ES'])             !!!!! DA SOSTITUIRE
 
+    
+
     config_opt = ['use_hurst', 'use_RSI_exit', 'use_take_profit']
     output = []
 
@@ -35,39 +46,34 @@ def main() -> None:
 
         res = run(df=df, strategy=strategy)
 
-        cum_factors = []
-        cum_factor = 1.0
 
-        for t in res:
-            p = t["profit"]
-        if p is None:
-            cum_factors.append(cum_factor)
-            continue
-        cum_factor *= (1 + p)
-        cum_factors.append(cum_factor)
+        returns = pd.Series((t["profit"] for t in res)).dropna()
+
+        equity_curve = cumulative_return(returns)
+
+        win_rate = returns.sum() / len(returns)
+        
+        profit_factor = returns[returns > 0].sum() / abs(returns[returns < 0].sum())
 
         metrics = {
-            "sharpe_ratio": sharpe_ratio((t["profit"] for t in res)),
-            "max_drawdown": max_drawdown(cum_factors),
-            "cagr": cagr(cum_factors)
+            "sharpe_ratio": sharpe_ratio(returns),
+            "max_drawdown": max_drawdown(equity_curve),
+            "cagr": cagr(equity_curve),
+            "equity_curve": equity_curve,
+            "win_rate": win_rate,
+            "profit_factor": profit_factor
         }
         logging.info("-" * 50)
-        logging.info("\nDISABLED feature: \t ", opt)
+        logging.info("\nDISABLED feature: \t %s", opt)
         out = {
             "disaled_feature": opt,
             "all_trades": res,
             "metrics": metrics
         }
         output.append(out)
-        logging.info("-" * 50) 
-        logging.info("\n\n- METRICS")
-        logging.info("\n sharpe ratio ->", metrics["sharpe_ratio"])
-        logging.info("\n max_drawdown ->", metrics["max_drawdown"])
-        logging.info("\n cagr ->", metrics["cagr"])
-        logging.info("\n")
-        logging.info("-" * 50) 
-    
-    return
+        
 
-if __name__ == '__main__':
-    main()
+    return output
+
+#if __name__ == '__main__':
+#  main()

@@ -27,4 +27,3 @@ def should_exit(df: pd.DataFrame, i: int, state: dict, params: dict) -> bool:
             continue
     return True
 
-    pass

@@ -27,3 +27,9 @@ ablation: # setting ablation boolean values to make testing and parameters isola
   use_time_exit: true
   use_RSI_exit: true
   use_take_profit: true
+logger: # setting log info
+  strategy_exit_level: DEBUG
+  strategy_entrance_level: DEBUG
+  engine_level: DEBUG
+  ablation_level: DEBUG
+  indicators_level: DEBUG

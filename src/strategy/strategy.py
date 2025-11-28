@@ -50,22 +50,23 @@ class Strategy:
         Output:
         bool: True if long entry condition is met.
         """
-        long_entry_check = False
+        long_entry_rsi = False
+        long_entry_hurst = False
         # RSI check
         if self.__cfg['ablation']['use_rsi']:
             if 'rsi' in df.columns:
                 if long_entry(df, i, self.__cfg):
-                    long_entry_check = True
+                    long_entry_rsi = True
                 else:
                     logging.info("NO ENTRY: RSI indicators was NOT between 10 ad 20.")
             elif 'rsi' not in df.columns:
                 logging.error('Dataframe does NOT have RSI columns!')
 
         # Hurst check
-        if self.__cfg['ablation']['use_hurst'] and not long_entry_check:
+        if self.__cfg['ablation']['use_hurst']:
             if 'hurst' in df.columns and 'hurst_threshold' in self.__cfg['entry_thresholds'].keys():
                 if allow(df, i, self.__cfg):
-                    long_entry_check = True
+                    long_entry_hurst = True
                 else:
                     logging.info("NO ENTRY: Hurst filter is NOT above the threshold.")
             elif 'hurst_threshold' not in self.__cfg['entry_thresholds'].keys():
@@ -73,7 +74,16 @@ class Strategy:
             elif 'hurst' not in df.columns:
                 logging.error('Hurst exponent is NOT in the dataframe!')
 
-        return long_entry_check
+        if not self.__cfg['ablation']['use_rsi'] and self.__cfg['ablation']['use_hurst']:
+            return long_entry_hurst
+        elif not self.__cfg['ablation']['use_hurst'] and self.__cfg['ablation']['use_rsi']:
+            return long_entry_rsi
+        elif self.__cfg['ablation']['use_rsi'] and self.__cfg['ablation']['use_hurst']:
+            return (long_entry_rsi and long_entry_hurst)
+        else:
+            # fallback: entry signal := true if there is no conditions on entry
+            return True
+
     def exit_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
         """
         Evaluate exit conditions for an open trade.

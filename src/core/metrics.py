@@ -73,3 +73,30 @@ def cagr(equity_curve: pd.Series, periods_per_year: int = 252) -> float:
 
     cagr = (end / start) ** (periods_per_year / total_periods) - 1
     return cagr
+
+
+def cumulative_return(returns : pd.Series) -> pd.Series:
+    """""
+    Compute the cumulative return from the series of periodic returns
+    
+    Parameters
+    --------
+    returns: pd.Series
+    seires of periodic returns
+
+    Output 
+    -------
+    cum_factors: pd.Series
+    series representing the equity curve  
+    """""
+    cum_factors = [1.0]
+    cum_factor = 1.0
+    
+    for p in returns:
+        if p is None:
+            cum_factors.append(cum_factor)
+            continue
+        cum_factor *= (1 + p)
+        cum_factors.append(cum_factor)
+
+    return pd.Series(cum_factors)

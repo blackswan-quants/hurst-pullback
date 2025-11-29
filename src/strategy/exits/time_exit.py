@@ -9,7 +9,7 @@ def should_exit(state: dict, params: dict) -> bool:
     """
 
     bars = state['bars']
-    max_bars = params['max_bars_in_trade']
+    max_bars = params['exits']['max_bars_in_trade']
 
     if bars >= max_bars:
         return True

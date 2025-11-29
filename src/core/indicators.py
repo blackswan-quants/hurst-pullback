@@ -1,8 +1,11 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
+import logging
 
-def rsi(series: pd.Series, period: int = 2) -> pd.Series:
+logger = logging.getLogger(__name__)
+
+def rsi(series: pd.Series, period: int = 2) -> float:
     """
     Compute Relative Strength Index (RSI)
 
@@ -11,8 +14,14 @@ def rsi(series: pd.Series, period: int = 2) -> pd.Series:
         period (int): Lookback period (default=2)
 
     Returns
-        pd.Series: RSI values (0–100 range)
+        float: last RSI value
     """
+    if series is None or len(series) == 0:
+        logger.error("rsi: empty series or None")
+        return float("nan")
+    if len(series.dropna()) < period + 1:
+        logger.error("rsi: insuff. data (min %d, found %d)", period + 1, len(series.dropna()))
+    
     delta = series.diff() # computes daily returns
     gain = delta.clip(lower=0) # positive returns
     loss = -delta.clip(upper=0) # negative returns
@@ -30,7 +39,14 @@ def rsi(series: pd.Series, period: int = 2) -> pd.Series:
     RSI = 100 - (100 / (1 + RS))
     RSI = RSI.fillna(0)
 
-    return RSI
+    try:
+        value = float(RSI.iloc[-1])
+    except Exception as e:
+        logger.exception("rsi: extraction error: %s", e)
+        return float("nan")
+    if not np.isfinite(value):
+        logger.error("rsi: inf value (%.5f)", value)
+    return value
 
 
 def hurst_local(series: pd.Series) -> float:
@@ -60,13 +76,18 @@ def hurst_local(series: pd.Series) -> float:
     ts = np.asarray(series, dtype=float) # Convert to numpy array
     N = len(ts)
     if N < 8:
+        logger.error("hurst_local: insuff. data (N=%d, min 8)", N)
         return np.nan
 
     # Range of segment sizes
     max_window = N // 2
-
+    if max_window < 4:
+        logger.error("hurst_local: max_window too short (max_window=%d)", max_window)
+        return np.nan
     window_sizes = np.unique(np.floor(np.logspace(np.log10(4), np.log10(max_window), num=10)).astype(int))
+    
     RS_vals = []
+    used_windows = []
     for w in window_sizes:
         if w >= N:
             continue
@@ -82,16 +103,18 @@ def hurst_local(series: pd.Series) -> float:
                 RS_seg.append(R/S)
         if RS_seg:
             RS_vals.append(np.mean(RS_seg))
+            used_windows.append(w)
     if len(RS_vals) < 2:
+        logger.error("hurst_local: R/S insuff. observations (len=%d)", len(RS_vals))
         return np.nan
     # The Hurst exponent is the slope of the log-log plot
-    lx = np.log10(window_sizes[:len(RS_vals)])
+    lx = np.log10(np.array(used_windows))
     ly = np.log10(RS_vals)
     slope, _, _, _, _ = stats.linregress(lx, ly) 
     return slope
 
 
-def hurst_exponent(series: pd.Series, window: int = 20) -> pd.Series:
+def hurst_exponent(series: pd.Series, window: int = 20) -> float:
     """
     Compute a rolling (moving-window) Hurst exponent series.
 
@@ -108,20 +131,43 @@ def hurst_exponent(series: pd.Series, window: int = 20) -> pd.Series:
 
     Returns
     -------
-    pd.Series
-        Rolling Hurst exponent values aligned to the input series. Values may be ``np.nan`` for
-        early timestamps where the window is not full or where the local estimator returns NaN.
-
+    float
+        Last rolling Hurst value (np.nan if window is not full).
+    
     Notes
     -----
     - The function delegates the actual R/S calculation to :func:`hurst_local`.
     - Caller may choose to post-process the output (e.g., smoothing or forward-filling) depending
       on downstream use-cases.
     """
-    H = series.rolling(window).apply(lambda x: hurst_local(x), raw=False)
+    if series is None or len(series) == 0:
+        logger.error("hurst_exponent: empty series or None")
+        return float("nan")
+    if len(series.dropna()) < window:
+        logger.error("hurst_exponent: insuff. data (window=%d, found=%d)", window, len(series.dropna()))
+
+    H_series = series.rolling(window).apply(lambda x: hurst_local(x), raw=False)
+    H = float(H_series.iloc[-1])
     return H
 
-def composite_rsi(series: pd.Series, short: int, long: int) -> pd.Series:
+
+def _rsi_series(series: pd.Series, period: int) -> pd.Series:
+    """Internal helper: full RSI series (used by composite_rsi)."""
+    if series is None or len(series) == 0:
+        logger.error("_rsi_series: empty series or None")
+        return pd.Series([np.nan]*0, index=series.index if isinstance(series, pd.Series) else None)
+    if len(series.dropna()) < period + 1:
+        logger.error("_rsi_series: insuff. data (min %d, found %d)", period + 1, len(series.dropna()))
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    RS = avg_gain / avg_loss
+    RSI = 100 - (100 / (1 + RS))
+    return RSI.fillna(0)
+
+def composite_rsi(series: pd.Series, short: int, long: int) -> float:
     """
     Compute a composite (smoothed) short-term RSI by applying exponential smoothing over a
     longer timescale.
@@ -137,15 +183,19 @@ def composite_rsi(series: pd.Series, short: int, long: int) -> pd.Series:
 
     Returns
     -------
-    pd.Series
-        EWMA-smoothed short-term RSI. The returned series preserves NaNs from the underlying
-        short-term RSI until enough data is available.
+    float
+        Last value of the EWMA-smoothed short RSI
 
     Notes
     -----
     - This helper is commonly used in signal generation when a very short RSI is noisy and a
       smoothed version is preferred for rule-based entries/exits.
     """
-    short_rsi = rsi(series, short)
-    comp_rsi = short_rsi.ewm(span=long, adjust=False).mean()  # EWMA smoothing
-    return comp_rsi
+    if series is None or len(series) == 0:
+        logger.error("composite_rsi: empty series or None")
+        return float("nan")
+    if len(series.dropna()) < short + 1:
+        logger.error("composite_rsi: insuff. data for short=%d (found=%d)", short, len(series.dropna()))
+    short_rsi_series = _rsi_series(series, period=short)
+    comp_rsi_series = short_rsi_series.ewm(span=long, adjust=False).mean()
+    return float(comp_rsi_series.iloc[-1])

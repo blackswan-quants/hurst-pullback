@@ -87,6 +87,3 @@ def run_ablation() -> list:
         output.append(out)
         
     return output
-
-if __name__ == '__main__':
-    run_ablation()

@@ -40,13 +40,14 @@ class Strategy:
         new_cfg (dict): new configurations
         """
         self.__cfg = new_cfg
-    def entry_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
+    def entry_signal(self, df: pd.DataFrame, i: int, state: dict, logging_flag:bool=False) -> bool:
         """
         Evaluate entry conditions for the current bar.
         Input:
         df (pd.DataFrame): DataFrame with indicators.
         i (int): Current bar index.
         state (dict): Position state (flat or long).
+        logging_flag (bool): Enable logging.
         Output:
         bool: True if long entry condition is met.
         """
@@ -57,7 +58,7 @@ class Strategy:
             if 'rsi' in df.columns:
                 if long_entry(df, i, self.__cfg):
                     long_entry_rsi = True
-                else:
+                elif logging_flag:
                     logging.info("NO ENTRY: RSI indicators was NOT between 10 ad 20.")
             elif 'rsi' not in df.columns:
                 logging.error('Dataframe does NOT have RSI columns!')
@@ -67,7 +68,7 @@ class Strategy:
             if 'hurst' in df.columns and 'hurst_threshold' in self.__cfg['entry_thresholds'].keys():
                 if allow(df, i, self.__cfg):
                     long_entry_hurst = True
-                else:
+                elif logging_flag:
                     logging.info("NO ENTRY: Hurst filter is NOT above the threshold.")
             elif 'hurst_threshold' not in self.__cfg['entry_thresholds'].keys():
                 logging.error("Parameters dictionary does NOT contain hurst threshold!")
@@ -84,13 +85,14 @@ class Strategy:
             # fallback: entry signal := true if there is no conditions on entry
             return True
 
-    def exit_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
+    def exit_signal(self, df: pd.DataFrame, i: int, state: dict, logging_flag:bool=False) -> bool:
         """
         Evaluate exit conditions for an open trade.
         Input:
         df (pd.DataFrame): DataFrame with indicators.
         i (int): Current bar index.
         state (dict): Dictionary containing current position info.
+        logging_flag (bool): Enable logging.
         Output:
         bool: True if exit condition is met.
         """
@@ -106,7 +108,8 @@ class Strategy:
                 logging.error("The parameters ’max_bars_in_trade’ is NOT in the configuration dictionary!")
             elif should_exit(state, self.__cfg):
                 exit_position = True
-                logging.info(f"EXIT SIGNAL: the maximum bars in trade is reached")
+                if logging_flag:
+                    logging.info(f"EXIT SIGNAL: the maximum bars in trade is reached")
 
         # pofit exit check
         if self.__cfg['ablation']['use_take_profit'] and not exit_position:
@@ -118,7 +121,8 @@ class Strategy:
                 logging.error("'max_profitable_closes' is NOT in configuration dictionary!")
             elif prof_exit(df, i, state, self.__cfg):
                 exit_position = True
-                logging.info(f"EXIT SIGNAL: the position was profitable for {exits_cfg['max_profitable_closes']} days.")                
+                if logging_flag:
+                    logging.info(f"EXIT SIGNAL: the position was profitable for {exits_cfg['max_profitable_closes']} days.")                
 
         # composite rsi check
         if self.__cfg['ablation']['use_RSI_exit'] and not exit_position:
@@ -128,6 +132,7 @@ class Strategy:
                 logging.error("The parameters composite_rsi_threshold is NOT in the configuration dictionary!")
             elif rsi_exit(df, i, exits_cfg):
                 exit_position = True
-                logging.info(f"EXIT SIGNAL: the composite rsi signal was triggered!")
+                if logging_flag:
+                    logging.info(f"EXIT SIGNAL: the composite rsi signal was triggered!")
 
         return exit_position

@@ -24,28 +24,32 @@ def run_ablation() -> list:
     1. Iterate over all ablation flags.
     2. Disable one component at a time.
     3. Re-run backtest and log performance differences.
+    Output:
+    list: A list of object:
+        {
+            'disabled_feature' (string): The control that was disabled
+            'all_trades' (dict): All the trades made with this strategy
+            'metrics' (dict): A list of metrics (sharpe ratio, max drawdown, cagr, win rate, profit factor)
+        }
     """
-    
-    
     
     with open("./configs/base.yaml", "r") as f:
         config = yaml.safe_load(f)
 
     df = pd.read_csv("./" + config['data']['clean_ES']) 
-    #df = load_data(config['data']['clean_ES'])             !!!!! DA SOSTITUIRE
-
-    
 
     config_opt = ['use_hurst', 'use_RSI_exit', 'use_take_profit']
     output = []
 
     for opt in config_opt:
         tmp_config = copy.deepcopy(config)
-        tmp_config['ablation'][opt] = False
+        if tmp_config['ablation'][opt]:
+            tmp_config['ablation'][opt] = False
+        else:
+            logging.error(f"The logic {opt} was not found!")
         strategy = Strategy(cfg=tmp_config)
 
         res = run(df=df, strategy=strategy)
-
 
         returns = pd.Series((t["profit"] for t in res)).dropna()
 
@@ -63,8 +67,18 @@ def run_ablation() -> list:
             "win_rate": win_rate,
             "profit_factor": profit_factor
         }
+
         logging.info("-" * 50)
-        logging.info("\nDISABLED feature: \t %s", opt)
+        logging.info("\tDISABLED feature: \t %s", opt)
+        logging.info("-" * 50)
+        logging.info(f"\t- sharpe ratio: {metrics['sharpe_ratio']}")
+        logging.info(f"\t- max drawdown: {metrics['max_drawdown']}")
+        logging.info(f"\t- cagr: {metrics['cagr']}")
+        #logging.info(f"\t- equity curve: {metrics['equity_curve']}")
+        logging.info(f"\t- win rate: {metrics['win_rate']}")
+        logging.info(f"\t- profit factor: {metrics['profit_factor']}")
+        logging.info("-" * 50)
+
         out = {
             "disaled_feature": opt,
             "all_trades": res,
@@ -72,8 +86,7 @@ def run_ablation() -> list:
         }
         output.append(out)
         
-
     return output
 
-#if __name__ == '__main__':
-#  main()
+if __name__ == '__main__':
+    run_ablation()

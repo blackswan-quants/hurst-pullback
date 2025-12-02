@@ -33,3 +33,8 @@ logger: # setting log info
   engine_level: DEBUG
   ablation_level: DEBUG
   indicators_level: DEBUG
+transaction_costs: # modify if necessary
+  commission_per_contract: 1.5
+  slippage_tickets: 1
+  point_value: 50
+  tick_size: 0.25

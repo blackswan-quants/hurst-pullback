@@ -6,6 +6,9 @@ from .exits.profitable_close_exit import should_exit as prof_exit
 from .signals.composite_rsi_exit import should_exit as rsi_exit
 import logging
 
+logger = logging.getLogger(__name__)
+
+
 class Strategy:
     """
     Main orchestrator class that manages entry and exit signals
@@ -19,13 +22,18 @@ class Strategy:
         """
         Initialize strategy with configuration parameters.
         """
-        if 'max_bars_in_trade' not in cfg['exits'].keys():
-            logging.error("The parameters ’max_bars_in_trade’ is NOT in the configuration dictionary!")
-        if 'max_profitable_closes' not in cfg['exits'].keys():
-            logging.error("'max_profitable_closes' is NOT in configuration dictionary!")
-        if 'hurst_threshold' not in cfg['entry_thresholds'].keys():
-            logging.error("Parameters dictionary does NOT contain hurst threshold!")
+        # Check for nested config values
+        if 'exits' not in cfg or 'max_bars_in_trade' not in cfg.get('exits', {}):
+            logger.warning(
+                "The parameters 'max_bars_in_trade' is NOT in the configuration dictionary!")
+        if 'exits' not in cfg or 'max_profitable_closes' not in cfg.get('exits', {}):
+            logger.warning(
+                "'max_profitable_closes' is NOT in configuration dictionary!")
+        if 'entry_thresholds' not in cfg or 'hurst_threshold' not in cfg.get('entry_thresholds', {}):
+            logger.warning(
+                "Parameters dictionary does NOT contain hurst threshold!")
         self.__cfg = cfg
+
     def get_cfg(self) -> dict:
         """
         Getter method for configuation parameters.
@@ -33,14 +41,16 @@ class Strategy:
         dict: The configuration parameters.
         """
         return self.__cfg
-    def set_cfg(self, new_cfg:dict):
+
+    def set_cfg(self, new_cfg: dict):
         """
         Setter method for configuration parameters.
         Input:
         new_cfg (dict): new configurations
         """
         self.__cfg = new_cfg
-    def entry_signal(self, df: pd.DataFrame, i: int, state: dict, logging_flag:bool=False) -> bool:
+
+    def entry_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
         """
         Evaluate entry conditions for the current bar.
         Input:
@@ -51,41 +61,64 @@ class Strategy:
         Output:
         bool: True if long entry condition is met.
         """
-        long_entry_rsi = False
-        long_entry_hurst = False
-        # RSI check
-        if self.__cfg['ablation']['use_rsi']:
-            if 'rsi' in df.columns:
-                if long_entry(df, i, self.__cfg):
-                    long_entry_rsi = True
-                elif logging_flag:
-                    logging.info("NO ENTRY: RSI indicators was NOT between 10 ad 20.")
+        try:
+            if i >= len(df):
+                return False
+
+            long_entry_check = True
+            # Get entry thresholds config
+            entry_cfg = self.__cfg.get('entry_thresholds', {})
+
+            # RSI check
+            if 'rsi' in df.columns and 'rsi_low' in entry_cfg and 'rsi_high' in entry_cfg:
+                if pd.isna(df.iloc[i]['rsi']):
+                    logger.warning(
+                        f"Signal Invalidated at index {i}: RSI is NaN")
+                    return False
+
+                if not long_entry(df, i, entry_cfg):
+                    long_entry_check = False
+                    logger.info(
+                        "NO ENTRY: RSI indicators was NOT between 10 ad 20.")
             elif 'rsi' not in df.columns:
-                logging.error('Dataframe does NOT have RSI columns!')
+                logger.error('RSI is NOT in the Dataframe!')
+                long_entry_check = False
+            elif 'rsi_low' not in entry_cfg:
+                logger.error(
+                    'Parameters dictionary does NOT contain rsi_low! ')
+                long_entry_check = False
+            elif 'rsi_high' not in entry_cfg:
+                logger.error(
+                    'Parameters dictionary does NOT contain rsi_high! ')
+                long_entry_check = False
 
-        # Hurst check
-        if self.__cfg['ablation']['use_hurst']:
-            if 'hurst' in df.columns and 'hurst_threshold' in self.__cfg['entry_thresholds'].keys():
-                if allow(df, i, self.__cfg):
-                    long_entry_hurst = True
-                elif logging_flag:
-                    logging.info("NO ENTRY: Hurst filter is NOT above the threshold.")
-            elif 'hurst_threshold' not in self.__cfg['entry_thresholds'].keys():
-                logging.error("Parameters dictionary does NOT contain hurst threshold!")
+            # Hurst check
+            if 'hurst' in df.columns and 'hurst_threshold' in entry_cfg:
+                if pd.isna(df.iloc[i]['hurst']):
+                    logger.warning(
+                        f"Signal Invalidated at index {i}: Hurst is NaN")
+                    return False
+
+                if long_entry_check and not allow(df, i, entry_cfg):
+                    long_entry_check = False
+                    logger.info(
+                        "NO ENTRY: Hurst filter is NOT above the threshold.")
+            elif 'hurst_threshold' not in entry_cfg:
+                logger.error(
+                    "Parameters dictionary does NOT contain hurst threshold!")
+                long_entry_check = False
             elif 'hurst' not in df.columns:
-                logging.error('Hurst exponent is NOT in the dataframe!')
+                logger.error('Hurst exponent is NOT in the dataframe!')
+                long_entry_check = False
 
-        if not self.__cfg['ablation']['use_rsi'] and self.__cfg['ablation']['use_hurst']:
-            return long_entry_hurst
-        elif not self.__cfg['ablation']['use_hurst'] and self.__cfg['ablation']['use_rsi']:
-            return long_entry_rsi
-        elif self.__cfg['ablation']['use_rsi'] and self.__cfg['ablation']['use_hurst']:
-            return (long_entry_rsi and long_entry_hurst)
-        else:
-            # fallback: entry signal := true if there is no conditions on entry
-            return True
+            return long_entry_check
 
-    def exit_signal(self, df: pd.DataFrame, i: int, state: dict, logging_flag:bool=False) -> bool:
+        except Exception as e:
+            logger.error(
+                f"Strategy Entry Crash at index {i}: {e}", exc_info=True)
+            return False
+
+    def exit_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
         """
         Evaluate exit conditions for an open trade.
         Input:
@@ -96,43 +129,58 @@ class Strategy:
         Output:
         bool: True if exit condition is met.
         """
-        exit_position = False
-        # Get exits config
-        exits_cfg = self.__cfg.get('exits', {})
+        try:
+            if i >= len(df):
+                return False
 
-        # Time exit check
-        if self.__cfg['ablation']['use_time_exit']:
+            exit_position = False
+            # Get exits config
+            exits_cfg = self.__cfg.get('exits', {})
+
+            # Time exit check
             if 'bars' not in state.keys():
-                logging.error("'bars' number is NOT in state dictionary!")
-            elif 'max_bars_in_trade' not in self.__cfg['exits'].keys():
-                logging.error("The parameters ’max_bars_in_trade’ is NOT in the configuration dictionary!")
-            elif should_exit(state, self.__cfg):
+                logger.error("'bars' number is NOT in state dictionary!")
+            elif 'max_bars_in_trade' not in exits_cfg:
+                logger.error(
+                    "The parameters 'max_bars_in_trade' is NOT in the configuration dictionary!")
+            elif should_exit(state, exits_cfg):
                 exit_position = True
-                if logging_flag:
-                    logging.info(f"EXIT SIGNAL: the maximum bars in trade is reached")
+                logger.info(
+                    f"EXIT SIGNAL: the maximum bars in trade is reached")
 
-        # pofit exit check
-        if self.__cfg['ablation']['use_take_profit'] and not exit_position:
-            if 'entry_price' not in state.keys():
-                logging.error("'entry_price' is NOT in state dictionary!")
-            elif 'prof_x' not in state.keys():
-                logging.error("'prof_x' is NOT in state dictionary!")
-            elif 'max_profitable_closes' not in self.__cfg['exits'].keys():
-                logging.error("'max_profitable_closes' is NOT in configuration dictionary!")
-            elif prof_exit(df, i, state, self.__cfg):
-                exit_position = True
-                if logging_flag:
-                    logging.info(f"EXIT SIGNAL: the position was profitable for {exits_cfg['max_profitable_closes']} days.")                
+            # profit exit check
+            if not exit_position:
+                if 'entry_price' not in state.keys():
+                    logger.error("'entry_price' is NOT in state dictionary!")
+                elif 'bars' not in state.keys():
+                    logger.error("'bars' is NOT in state dictionary!")
+                elif 'max_profitable_closes' not in exits_cfg:
+                    logger.error(
+                        "The parameters 'max_profitable_closes' is NOT in the configuration dictionary!")
+                elif prof_exit(df, i, state, exits_cfg):
+                    exit_position = True
+                    logger.info(
+                        f"EXIT SIGNAL: the position was profitable for {exits_cfg['max_profitable_closes']} days.")
 
-        # composite rsi check
-        if self.__cfg['ablation']['use_RSI_exit'] and not exit_position:
-            if 'composite_rsi' not in df.colums:
-                logging.error("'composite_rsi' is NOT in the dataframe!")
-            elif 'composite_rsi_threshold' not in exits_cfg:
-                logging.error("The parameters composite_rsi_threshold is NOT in the configuration dictionary!")
-            elif rsi_exit(df, i, exits_cfg):
-                exit_position = True
-                if logging_flag:
-                    logging.info(f"EXIT SIGNAL: the composite rsi signal was triggered!")
+            # composite rsi check
+            if not exit_position:
+                if 'composite_rsi' not in df.columns:
+                    logger.error("'composite_rsi' is NOT in the dataframe!")
+                elif 'composite_rsi_threshold' not in exits_cfg:
+                    logger.error(
+                        "The parameters composite_rsi_threshold is NOT in the configuration dictionary!")
+                else:
+                    if pd.isna(df.iloc[i]['composite_rsi']):
+                        logger.warning(
+                            f"Exit Signal Ignored at index {i}: Composite RSI is NaN")
+                        return False
+                    if rsi_exit(df, i, exits_cfg):
+                        exit_position = True
+                        logger.info(
+                            f"EXIT SIGNAL: the composite rsi signal was triggered!")
 
-        return exit_position
+            return exit_position
+
+        except Exception as e:
+            logger.error(f"Exit Signal Crash at index {i}: {e}")
+            return False

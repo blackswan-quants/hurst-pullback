@@ -57,6 +57,7 @@ class Strategy:
         df (pd.DataFrame): DataFrame with indicators.
         i (int): Current bar index.
         state (dict): Position state (flat or long).
+        logging_flag (bool): Enable logging.
         Output:
         bool: True if long entry condition is met.
         """
@@ -124,6 +125,7 @@ class Strategy:
         df (pd.DataFrame): DataFrame with indicators.
         i (int): Current bar index.
         state (dict): Dictionary containing current position info.
+        logging_flag (bool): Enable logging.
         Output:
         bool: True if exit condition is met.
         """

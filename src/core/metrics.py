@@ -75,133 +75,28 @@ def cagr(equity_curve: pd.Series, periods_per_year: int = 252) -> float:
     return cagr
 
 
-def expectancy(trade_returns: pd.Series) -> float:
-    """
-    Calculate expectancy per trade.
-
+def cumulative_return(returns : pd.Series) -> pd.Series:
+    """""
+    Compute the cumulative return from the series of periodic returns
+    
     Parameters
-    -----
-    trade_returns : pd.Series
-        Profit/loss of each trade.
+    --------
+    returns: pd.Series
+    seires of periodic returns
 
-    Returns
-    -----
-    float
-        Expectancy value (average profit per trade).
-    """
-    wins = trade_returns[trade_returns > 0]
-    losses = trade_returns[trade_returns < 0]
+    Output 
+    -------
+    cum_factors: pd.Series
+    series representing the equity curve  
+    """""
+    cum_factors = [1.0]
+    cum_factor = 1.0
+    
+    for p in returns:
+        if p is None:
+            cum_factors.append(cum_factor)
+            continue
+        cum_factor *= (1 + p)
+        cum_factors.append(cum_factor)
 
-    if len(trade_returns) == 0:
-        return np.nan
-
-    pw = len(wins) / len(trade_returns)
-    pl = len(losses) / len(trade_returns)
-
-    avg_win = wins.mean() if len(wins) > 0 else 0
-    avg_loss = abs(losses.mean()) if len(losses) > 0 else 0
-
-    return pw * avg_win - pl * avg_loss
-
-
-def profit_factor(trade_returns: pd.Series) -> float:
-    """
-    Compute the Profit Factor.
-
-    Parameters
-    -----
-    trade_returns : pd.Series
-        Profit/loss for each trade.
-
-    Returns
-    -----
-    float
-        Profit Factor (gross profit / gross loss).
-    """
-    gross_profit = trade_returns[trade_returns > 0].sum()
-    gross_loss = trade_returns[trade_returns < 0].sum()
-
-    if gross_loss == 0:
-        return np.inf
-
-    return gross_profit / abs(gross_loss)
-
-
-def equity_curve_smoothness(equity_curve: pd.Series) -> float:
-    """
-    Compute equity curve smoothness as CAGR / volatility of log-returns.
-
-    Parameters
-    -----
-    equity_curve : pd.Series
-        Cumulative portfolio values.
-
-    Returns
-    -----
-    float
-        Smoothness value (higher = smoother equity).
-    """
-    log_returns = np.log(equity_curve / equity_curve.shift(1)).dropna()
-
-    vol = log_returns.std()
-    if vol == 0 or len(log_returns) < 2:
-        return np.nan
-
-    cagr_value = (
-        equity_curve.iloc[-1] / equity_curve.iloc[0]) ** (252 / len(equity_curve)) - 1
-
-    return cagr_value / vol
-
-
-def sortino_ratio(returns: pd.Series, periods_per_year: int = 252, risk_free_rate: float = 0.0) -> float:
-    """
-    Compute the Sortino Ratio.
-
-    Parameters
-    -----
-    returns : pd.Series
-        Asset or strategy periodic returns.
-    periods_per_year : int
-        Sampling frequency (252 daily, 52 weekly, 12 monthly).
-    risk_free_rate : float
-        Annual risk-free rate.
-
-    Returns
-    -----
-    float
-        Annualized Sortino Ratio.
-    """
-    excess_returns = returns - risk_free_rate / periods_per_year
-
-    downside_returns = excess_returns[excess_returns < 0]
-
-    if len(downside_returns) == 0:
-        return np.inf
-
-    downside_std = downside_returns.std()
-    mean_excess = excess_returns.mean()
-
-    sortino = (mean_excess / downside_std) * np.sqrt(periods_per_year)
-
-    return sortino
-
-
-def win_rate(returns: pd.Series) -> float:
-    """
-    Compute the win rate (percentage of positive returns).
-
-    Parameters
-    -----
-    returns : pd.Series
-        Strategy or asset returns.
-
-    Returns
-    -----
-    float
-        Win rate in [0, 1].
-    """
-    if len(returns) == 0:
-        return np.nan
-
-    wins = (returns > 0).sum()
-    return wins / len(returns)
+    return pd.Series(cum_factors)

@@ -41,6 +41,7 @@ def main() -> None:
         'strategy_exit': 'strategy_exit_level',
         'indicators': 'indicators_level',
         'ablation': 'ablation_level',
+        'loader' : 'loader_level'
     }
 
     print("\n--- Starting Logger Configuration ---") # Used for visibility during runtime
@@ -81,9 +82,13 @@ def main() -> None:
     #### backtest running ####
     strategy = Strategy(data)
     logging.info(strategy.get_cfg())
-    all_trades = run(df, strategy)
+    all_trades = run(df[:200], strategy)
     print(f"Completed {len(all_trades)} trades")
     print(all_trades)
 
 if __name__ == "__main__":
     main()
+
+
+## cambia gli indicatori e aggiungi opzione per plottare dal main
+# cambia file clean 

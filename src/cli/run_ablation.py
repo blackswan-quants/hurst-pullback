@@ -9,13 +9,7 @@ from src.core.metrics import sharpe_ratio, max_drawdown, cagr, cumulative_return
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-    #filename = 'src/cli/ablation.log'    
-)
+logger = logging.getLogger('ablation')
 
 def run_ablation() -> list:
     """

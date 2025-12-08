@@ -4,7 +4,7 @@ from .indicators import *
 import yaml
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('engine')
 
 
 def translator(signal: bool, info: str) -> str:
@@ -74,9 +74,15 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     trade = {}
     i = 0
     signal = 'flat'
+    avg_loss = -1
+    avg_gain = -1
+    avg_loss_short = -1
+    avg_gain_short = -1
+    avg_loss_long = -1
+    avg_gain_long = -1
 
     # computing the indicators on the whole dataset
-    try:
+    '''try:
         df['rsi'] = rsi(df['Close'], lookback_rsi)
         df['composite_rsi'] = composite_rsi(
             df['Close'], short_composite_rsi, long_composite_rsi)
@@ -84,15 +90,18 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     except Exception as ind_err:
         logger.warning(f"Indicator failure: {ind_err}")
         return {}
+        '''
 
     try:
         while i < len(df):
-            """
-            TO BE CODED
-            df.loc[i, 'rsi'] = rsi(df['Close'], lookback_rsi)
-            df.loc[i, 'composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
-            df.loc[i, 'hurst'] = hurst_exponent(df['Close'], lookback_hurst)
-            """
+            logger.debug(f'Column number {i}')
+            try:
+                df.loc[i, 'rsi'] , avg_gain , avg_loss = rsi(df['Close'][:i], avg_gain , avg_loss, lookback_rsi)
+                df.loc[i, 'composite_rsi'] , avg_gain_short, avg_loss_short , avg_gain_long , avg_loss_long = composite_rsi(df['Close'][:i],avg_gain_short, avg_loss_short , avg_gain_long , avg_loss_long, short_composite_rsi, long_composite_rsi)
+                df.loc[i, 'hurst'] = hurst_exponent(df['Close'][:i], lookback_hurst)
+            except Exception as e:
+                logger.warning(f"Indicator failure : {e}")
+        
             # signal checking
             if signal == 'buy':
                 # open the position and initialize the trade dictionary

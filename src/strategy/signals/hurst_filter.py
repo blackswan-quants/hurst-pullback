@@ -11,7 +11,7 @@ def allow(df: pd.DataFrame, i: int, params: dict) -> bool:
     bool: True if Hurst exponent > threshold.
     """
     curr_hurst = df.loc[i, "hurst"]
-    hurst_thresh = params['entry_thresholds']["hurst_threshold"]
+    hurst_thresh = params["hurst_threshold"]
 
     if(curr_hurst is None or pd.isna(curr_hurst)):
         return False

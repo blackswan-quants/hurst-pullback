@@ -3,50 +3,73 @@ import pandas as pd
 from scipy import stats
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('indicators')
 
-def rsi(series: pd.Series, period: int = 2) -> float:
+def rsi(series: pd.Series, avg_gain : float, avg_loss : float, period: int = 2) -> float:
     """
-    Compute Relative Strength Index (RSI)
+    Compute Relative Strength Index (RSI) using the recursive Welles Wilder's smoothing method.
+
+    This function calculates the RSI value for the *last* price in the series, 
+    updating the running averages (avg_gain and avg_loss) for the next iteration.
 
     Args
-        series (pd.Series): Series of prices
-        period (int): Lookback period (default=2)
+        series (pd.Series): 
+            - For the first call (initialization): must contain the first PERIOD + 1 prices.
+            - For subsequent calls (recursion): must contain the last 2 prices (Price[today] and Price[yesterday]).
+        avg_gain (float): The smoothed average gain from the previous calculation. Use -1 for initialization.
+        avg_loss (float): The smoothed average loss from the previous calculation. Use -1 for initialization.
+        period (int): The lookback period (N) for the RSI calculation.
 
     Returns
-        float: last RSI value
+        tuple[float, float, float]: (RSI value, New Avg Gain, New Avg Loss)
+    """
+    """
+    TO BE CHANGED WITH A CLASS THAT SAVES AND UPDATES INTERNALLY THE FOLLOWING QUANTITIES:
+        avg_gain
+        avg_loss
+        period
+        value
     """
     if series is None or len(series) == 0:
         logger.error("rsi: empty series or None")
-        return float("nan")
+        return float("nan") , -1 , -1
     if len(series.dropna()) < period + 1:
         logger.error("rsi: insuff. data (min %d, found %d)", period + 1, len(series.dropna()))
+        return float('nan') , -1 , -1
+
+    smoothing_factor = 1/period
+
+    if avg_gain ==-1 and avg_loss == -1:
+        delta = series.diff().tail(period) # computes daily returns
+        gain = delta.clip(lower=0) # positive returns
+        loss = -delta.clip(upper=0) # negative returns
+        avg_gain = gain.mean()
+        avg_loss = loss.mean()
+    else:
+        change = series[-1] - series[-2]
+        gain = max(change,0)
+        loss = max(-change,0)
+        avg_gain = avg_gain + smoothing_factor*(gain - avg_gain)
+        avg_loss = avg_loss + smoothing_factor*(loss - avg_loss)
+
+
+    if avg_loss == 0.0:
+        if avg_gain > 0.0:
+            RSI =100.0 
+        else:
+            RSI = 0.0
+    elif avg_gain == 0.0 and avg_loss > 0.0:
+        RSI = 0.0
+
+    else:
+        RS = avg_gain / avg_loss
+        RSI = 100 - (100 / (1 + RS))
     
-    delta = series.diff() # computes daily returns
-    gain = delta.clip(lower=0) # positive returns
-    loss = -delta.clip(upper=0) # negative returns
 
-    # allegedly this Exponentially weighted smoothing should match EasyLanguage's standard
-    # Wilder's smoothing — exponential moving average with alpha = 1/period
-    # avg_gain = gain.ewm(alpha=1/period, adjust=False, min_periods=period).mean()
-    # avg_loss = loss.ewm(alpha=1/period, adjust=False, min_periods=period).mean()
-
-    # Rolling mean directly over the last N bars, no smoothing
-    avg_gain = gain.rolling(window=period, min_periods=period).mean()
-    avg_loss = loss.rolling(window=period, min_periods=period).mean()
-
-    RS = avg_gain / avg_loss
-    RSI = 100 - (100 / (1 + RS))
-    RSI = RSI.fillna(0)
-
-    try:
-        value = float(RSI.iloc[-1])
-    except Exception as e:
-        logger.exception("rsi: extraction error: %s", e)
-        return float("nan")
-    if not np.isfinite(value):
-        logger.error("rsi: inf value (%.5f)", value)
-    return value
+    logger.debug(f'RSI value is {RSI}')
+    if not np.isfinite(RSI):
+        logger.error("rsi: inf value (%.5f)", RSI)
+    return RSI , avg_gain , avg_loss
 
 
 def hurst_local(series: pd.Series) -> float:
@@ -140,62 +163,43 @@ def hurst_exponent(series: pd.Series, window: int = 20) -> float:
     - Caller may choose to post-process the output (e.g., smoothing or forward-filling) depending
       on downstream use-cases.
     """
-    if series is None or len(series) == 0:
+    '''if series is None or len(series) == 0:
         logger.error("hurst_exponent: empty series or None")
         return float("nan")
     if len(series.dropna()) < window:
         logger.error("hurst_exponent: insuff. data (window=%d, found=%d)", window, len(series.dropna()))
+        return
 
     H_series = series.rolling(window).apply(lambda x: hurst_local(x), raw=False)
-    H = float(H_series.iloc[-1])
+    H = float(H_series.iloc[-1])'''
+    #### TEMPORANEO
+    H = np.random.rand()
+
+    logger.debug(f"H is {H}")
+    #### TEMPORANEO
     return H
 
-
-def _rsi_series(series: pd.Series, period: int) -> pd.Series:
-    """Internal helper: full RSI series (used by composite_rsi)."""
-    if series is None or len(series) == 0:
-        logger.error("_rsi_series: empty series or None")
-        return pd.Series([np.nan]*0, index=series.index if isinstance(series, pd.Series) else None)
-    if len(series.dropna()) < period + 1:
-        logger.error("_rsi_series: insuff. data (min %d, found %d)", period + 1, len(series.dropna()))
-    delta = series.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(window=period, min_periods=period).mean()
-    avg_loss = loss.rolling(window=period, min_periods=period).mean()
-    RS = avg_gain / avg_loss
-    RSI = 100 - (100 / (1 + RS))
-    return RSI.fillna(0)
-
-def composite_rsi(series: pd.Series, short: int, long: int) -> float:
+def composite_rsi(series: pd.Series,avg_gain_short:float , avg_loss_short:float, avg_gain_long:float ,avg_loss_long:float, short: int, long: int) -> float:
     """
-    Compute a composite (smoothed) short-term RSI by applying exponential smoothing over a
-    longer timescale.
+    TO BE CHANGED WITH A CLASS THAT SAVES AND UPDATES THE FOLLOWING QUANTITIES INTERNALLY:
 
-    Parameters
-    ----------
-    series : pd.Series
-        Price series (close prices) used to compute the short-term RSI.
-    short : int
-        Lookback period for the short-term RSI (e.g., 2).
-    long : int
-        Smoothing span for the EWMA applied to the short RSI (e.g., 24).
+        avg_loss_short
+        avg_gain_short
+        avg_loss_long
+        avg_gain_long
+        short_period
+        long_period
+        value
 
-    Returns
-    -------
-    float
-        Last value of the EWMA-smoothed short RSI
-
-    Notes
-    -----
-    - This helper is commonly used in signal generation when a very short RSI is noisy and a
-      smoothed version is preferred for rule-based entries/exits.
     """
+    # weights initialized to 0.5
     if series is None or len(series) == 0:
         logger.error("composite_rsi: empty series or None")
-        return float("nan")
-    if len(series.dropna()) < short + 1:
-        logger.error("composite_rsi: insuff. data for short=%d (found=%d)", short, len(series.dropna()))
-    short_rsi_series = _rsi_series(series, period=short)
-    comp_rsi_series = short_rsi_series.ewm(span=long, adjust=False).mean()
-    return float(comp_rsi_series.iloc[-1])
+        return float("nan") , -1 , -1 , -1 , -1
+    if len(series.dropna()) < long + 1:
+        logger.error("composite_rsi: insuff. data for long=%d (found=%d)", long, len(series.dropna()))
+    short_rsi, avg_gain_short, avg_loss_short = rsi(series, avg_gain_short, avg_loss_short, period=short)
+    long_rsi, avg_gain_long, avg_loss_long = rsi(series, avg_gain_long, avg_loss_long, period=short)
+    comp_rsi = (0.5 * short_rsi) + (0.5 * long_rsi)
+    logger.debug(f"composite_rsi is {comp_rsi}")
+    return comp_rsi , avg_gain_short , avg_loss_short , avg_gain_long , avg_loss_long

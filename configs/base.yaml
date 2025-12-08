@@ -13,20 +13,24 @@ entry_thresholds: # setting the interval for RSI
   rsi_low: 10.0
   rsi_high: 20.0
   hurst_threshold: 0.5
-exits: # setting the exit criteria
-  max_time_exit: false
-  max_time: 11
-  take_profit: false
+exit_thresholds: # setting the exit criteria
   max_profitable_closes: 5
-  RSI_exit: false
-  max_bars_in_trade: false
+  max_bars_in_trade: 11
   composite_rsi_threshold: 0.5
 ablation: # setting ablation boolean values to make testing and parameters isolation robust
   use_rsi: true
   use_hurst: true
+  use_composite_rsi: true
   use_time_exit: true
   use_RSI_exit: true
   use_take_profit: true
+logger: # setting log info
+  strategy_exit_level: DEBUG
+  strategy_entry_level: DEBUG
+  engine_level: DEBUG
+  ablation_level: DEBUG
+  indicators_level: DEBUG
+  loader_level: DEBUG
 transaction_costs: # modify if necessary
   commission_per_contract: 1.5
   slippage_tickets: 1

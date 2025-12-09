@@ -1,66 +1,14 @@
-import pandas as pd 
-import numpy as np 
-from datetime import datetime
-import matplotlib as plt
-import os 
+import pandas as pd
+import numpy as np
+import os
 import warnings
-import pytest 
+import logging
+from typing import List, Optional
+
+logger = logging.getLogger('loader')
 
 
-
-def load_data(path : str) : 
-    """
-    Load a CSV file, standardize columns, and preprocess date/time features.
-
-    Parameters
-    ----------
-    path : str
-        The path to the CSV file to load.
-
-    Processing Steps
-    ----------------
-    - Reads the specified CSV as a pandas DataFrame.
-    - Standardizes column names: 'Date', 'Open', 'High', 'Low', 'Close', 'Volume' (makes lowercase).
-    - Converts the 'date' column to timezone-aware datetime64[ns, UTC] format.
-    - Sorts the DataFrame by the 'date' column.
-    - Sorts the DataFrame index.
-    - Removes duplicate rows and those with missing values.
-
-    Returns
-    -------
-    pandas.DataFrame
-        The cleaned and preprocessed DataFrame, ready for subsequent analysis.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the CSV file does not exist at the specified path.
-    ValueError
-        If required columns are missing or 'date' conversion fails.
-
-    Example
-    -------
-    >>> df = load_data("dataset.csv")
-    >>> print(df.head())
-    """
-
-    pd.read_csv('percorso del file CSV')
-
-    target_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-    df.columns = [col.lower() if col in target_columns else col for col in df.columns]
-
-    df['date'] = pd.to_datetime(df['date'] , utc = True , format = '%Y-%m-%d')
-    df['date'] = df['date'].dt.tz_localize('UTC' , nonexistent = 'NaT')
-    df['date'] = df.sort_values('date')
-
-    df = df.sort_index() 
-    df = df.drop_duplicates(inplace = True) 
-    df = df.dropna(inplace = True)
-
-    return df 
-
-def Error_handling (path: str, target_columns=None) : 
-
+def error_handling(path: str, target_columns: Optional[List[str]] = None) -> pd.DataFrame:
     """
     Load a CSV file and check schema validity, raising clear exceptions for missing files or malformed columns.
 
@@ -96,21 +44,30 @@ def Error_handling (path: str, target_columns=None) :
     >>> df = Error_handling("ohlc.csv")
     >>> print(df.head())
     """
+    if target_columns is None:
+        target_columns = ["date", "open", "high", "low", "close", "vol"]
 
-    if target_columns is None : 
-        target_columns = ['date' , 'open' , 'high' , 'low' , 'close' , 'volume']
+    if not os.path.exists(path):
+        logger.error(f"Validation failed. File not found: {path}")
+        raise FileNotFoundError(f"File not found: {path}")
 
-    #if not os.path.isfile(path) : 
-        #raise FileNotFoundError(f"File path "{} "does not exists")
-    
-    df = df.read_csv(path)
-    missing = [col for col in target_columns if col not in df.columns]
-    if missing:
-        raise ValueError(f"Missing columns : {missing}")
-    return df
+    try:
+        df = pd.read_csv(path)
+        df.columns = [c.lower() for c in df.columns]
 
-def check_time_gaps (df , date_column = 'date') :
+        missing = [c for c in target_columns if c not in df.columns]
+        if missing:
+            logger.error("Missing columns: %s", missing)
+            raise ValueError(f"Missing columns: {missing}")
+        return df
 
+    except Exception as e:
+        if not isinstance(e, ValueError):
+            logger.error(f"Error_handling check failed: {e}")
+        raise e
+
+
+def check_time_gaps(df: pd.DataFrame, date_column: str = "date") -> pd.DataFrame:
     """
     Check for time gaps greater than one day in a DataFrame and raise a warning if gaps are detected.
 
@@ -141,13 +98,94 @@ def check_time_gaps (df , date_column = 'date') :
     -------
     >>> check_time_gaps(df, date_column='timestamp')
     """
+    try:
+        if date_column not in df.columns:
+            return df
 
-    df[date_column] = pd.to_datetime(df[date_column] , utc = True)
-    df = df.sort_values(date_column)
+        # Ensure datetime format for calculation
+        temp_dates = pd.to_datetime(df[date_column], errors="coerce")
+        if temp_dates.isna().any():
+            logger.warning(
+                "Values found not in time format in date column during gap check")
+        gaps = temp_dates.sort_values().diff()
+        if (gaps > pd.Timedelta(days=1)).any():
+            warnings.warn(
+                "Intervals > 1 day between adjacent records were found")
+            logger.warning(
+                "Intervals > 1 day between adjacent records were found")
+        return df
+    except Exception as e:
+        logger.warning("Could not check time gaps: %s", e)
+        return df
 
-    gaps = df[date_column].diff()
+def load_data(path: str) -> pd.DataFrame:
+    """
+    Load a CSV file, standardize columns, and preprocess date/time features.
 
-    if (gaps > pd.Timedelta(days = 1)).any() : 
-        warnings("Intervals > 1 day between adjacent records were found")
+    Parameters
+    ----------
+    path : str
+        The path to the CSV file to load.
 
-    return df 
+    Processing Steps
+    ----------------
+    - Reads the specified CSV as a pandas DataFrame.
+    - Standardizes column names: 'Date', 'Open', 'High', 'Low', 'Close', 'Volume' (makes lowercase).
+    - Converts the 'date' column to timezone-aware datetime64[ns, UTC] format as 'datetime'.
+    - Sorts the DataFrame by the 'date' column.
+    - Sorts the DataFrame index.
+    - Removes duplicate rows and those with missing values.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The cleaned and preprocessed DataFrame, ready for subsequent analysis.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the CSV file does not exist at the specified path.
+    ValueError
+        If required columns are missing or 'date' conversion fails.
+
+    Example
+    -------
+    >>> df = load_data("dataset.csv")
+    >>> print(df.head())
+    """
+    if not os.path.exists(path):
+        logger.error(f"File not found: {path}")
+        raise FileNotFoundError(f"File not found: {path}")
+
+    try:
+        error_handling(path)
+        df = pd.read_csv(path)
+
+        if df.empty:
+            logger.error("The loaded CSV is empty")
+            raise ValueError("The loaded CSV is empty")
+        
+        
+        df.columns = [c.lower() for c in df.columns]
+
+        if "date" in df.columns:
+            df["datetime"] = pd.to_datetime(
+                df['date'], utc=True, format='%Y-%m-%d', errors='coerce')
+            if df['datetime'].isna().all():
+                raise ValueError("Date parsing failed. All values are NaT.")
+            df['datetime'] = df['datetime'].dt.tz_localize(None)
+            df = df.sort_values('datetime').reset_index(drop=True)
+        else:
+            logger.warning("'Date' column missing")
+
+        # Drop exact duplicate rows but preserve rows with missing indicator values for later handling
+        df.set_index('datetime', inplace=True)
+        df.drop_duplicates(inplace=True)
+        df.dropna(inplace=True)
+        logger.info(f"Successfully loaded {len(df)} rows")
+        check_time_gaps(df)
+        return df
+
+    except Exception as e:
+        logger.critical(f"Failed to load data: {e}", exc_info=True)
+        raise e

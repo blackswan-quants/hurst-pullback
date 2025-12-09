@@ -15,4 +15,3 @@ def should_exit(state: dict, params: dict) -> bool:
         return True
     else:
         return False
-    pass

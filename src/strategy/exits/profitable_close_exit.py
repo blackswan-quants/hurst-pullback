@@ -21,10 +21,9 @@ def should_exit(df: pd.DataFrame, i: int, state: dict, params: dict) -> bool:
         return False
 
     for j in range(max_profitable_closes):
-        if df.loc[i-j, 'close'] < df.loc[i-j, 'open']:
+        if df.loc[i-j, 'Close'] < df.loc[i-j, 'Open']:
             return False
         else:
             continue
     return True
 
-    pass

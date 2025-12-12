@@ -189,3 +189,37 @@ def load_data(path: str) -> pd.DataFrame:
     except Exception as e:
         logger.critical(f"Failed to load data: {e}", exc_info=True)
         raise e
+    
+def save_clean_data(df: pd.DataFrame, path: str) -> None:
+    """
+    Save a cleaned DataFrame to a specified CSV file path.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The cleaned DataFrame to save.
+    path : str
+        Destination path where the CSV file will be written.
+
+    Raises
+    ------
+    ValueError
+        If the DataFrame is empty.
+    IOError
+        If the file cannot be written.
+
+    Example
+    -------
+    >>> save_clean_data(df, "data/clean/my_new_dataset.csv")
+    """
+    if df is None or df.empty:
+        logger.error("Attempted to save an empty DataFrame.")
+        raise ValueError("Cannot save an empty DataFrame.")
+
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        df.to_csv(path, index=True, encoding="utf-8")
+        logger.info(f"Clean dataset successfully saved to {path}")
+    except Exception as e:
+        logger.error(f"Failed to save cleaned dataset to {path}: {e}")
+        raise IOError(f"Failed to save cleaned dataset to {path}: {e}")

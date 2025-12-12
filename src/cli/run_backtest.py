@@ -4,13 +4,6 @@ import sys
 from pathlib import Path
 import pandas as pd
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
 # Handle both module and direct execution
 try:
     from ..strategy.strategy import Strategy
@@ -38,6 +31,41 @@ def main() -> None:
     with open(config_path, 'r') as file:
         data = yaml.safe_load(file)
     
+    ###### logging setup ########
+    logger_config = data.get('logger', {})
+    DEFAULT_LEVEL = 'INFO'
+    DEFAULT_FALLBACK = logging.DEBUG # What to set if the level is invalid
+    LOGGER_MAP = {
+        'engine': 'engine_level',
+        'strategy_entry': 'strategy_entry_level',
+        'strategy_exit': 'strategy_exit_level',
+        'indicators': 'indicators_level',
+        'ablation': 'ablation_level',
+        'loader' : 'loader_level'
+    }
+
+    print("\n--- Starting Logger Configuration ---") # Used for visibility during runtime
+
+    for logger_name, config_key in LOGGER_MAP.items():
+        
+        level_str = logger_config.get(config_key, DEFAULT_LEVEL)
+        
+        logger_instance = logging.getLogger(logger_name)
+        try:
+            level_enum = getattr(logging, level_str.upper())
+            logger_instance.setLevel(level_enum)
+        
+            logging.info(f"Logger '{logger_name}' set to level: {level_str.upper()}")
+            
+        except AttributeError:
+            logger_instance.setLevel(DEFAULT_FALLBACK)
+            logging.warning(f"Level '{level_str}' in YAML for '{config_key}' is not valid. Falling back to {DEFAULT_FALLBACK.name}.")
+
+    print("--- Logger Configuration Complete ---\n")
+
+    #### end logging setup ####
+
+    #### dataframe loading ####
     data_path = project_root / "data" / "clean" / "NQ_clean.csv"
     try:
         df = pd.read_csv(data_path)
@@ -50,13 +78,17 @@ def main() -> None:
     except Exception as e:
         logging.error(f'An unexpected error occurred during file loading: {e}')
         return
-
+    
+    #### backtest running ####
     strategy = Strategy(data)
     logging.info(strategy.get_cfg())
-    all_trades = run(df, strategy)
+    all_trades = run(df[:200], strategy)
     print(f"Completed {len(all_trades)} trades")
     print(all_trades)
 
 if __name__ == "__main__":
     main()
 
+
+## cambia gli indicatori e aggiungi opzione per plottare dal main
+# cambia file clean 

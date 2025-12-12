@@ -2,9 +2,6 @@ import pandas as pd
 from ..strategy.strategy import Strategy
 from .indicators import *
 import yaml
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 def translator(signal: bool, info: str) -> str:
@@ -74,48 +71,45 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     trade = {}
     i = 0
     signal = 'flat'
+    avg_loss = -1
+    avg_gain = -1
+    avg_loss_short = -1
+    avg_gain_short = -1
+    avg_loss_long = -1
+    avg_gain_long = -1
 
     # computing the indicators on the whole dataset
-    try:
-        df['rsi'] = rsi(df['Close'], lookback_rsi)
-        df['composite_rsi'] = composite_rsi(
-            df['Close'], short_composite_rsi, long_composite_rsi)
-        df['hurst'] = hurst_exponent(df['Close'], lookback_hurst)
-    except Exception as ind_err:
-        logger.warning(f"Indicator failure: {ind_err}")
-        return {}
+    df['rsi'] = rsi(df['Close'], lookback_rsi)
+    df['composite_rsi'] = composite_rsi(
+        df['Close'], short_composite_rsi, long_composite_rsi)
+    df['hurst'] = hurst_exponent(df['Close'], lookback_hurst)
 
-    try:
-        while i < len(df):
-            """
-            TO BE CODED
-            df.loc[i, 'rsi'] = rsi(df['Close'], lookback_rsi)
-            df.loc[i, 'composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
-            df.loc[i, 'hurst'] = hurst_exponent(df['Close'], lookback_hurst)
-            """
-            # signal checking
-            if signal == 'buy':
-                # open the position and initialize the trade dictionary
-                df.loc[i, 'open_position'] = True
-                trade['open_date'] = df.index[i]
-                trade['entry_price'] = df.iloc[i]['Open']
-                trade['bars'] = 1
-                signal = 'flat'
-                logger.info(
-                    f"OPEN TRADE at {df.index[i]} at price {trade['entry_price']}")
+    while i < len(df):
+        """
+        TO BE CODED
+        df.loc[i, 'rsi'] = rsi(df['Close'], lookback_rsi)
+        df.loc[i, 'composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
+        df.loc[i, 'hurst'] = hurst_exponent(df['Close'], lookback_hurst)
+        """
+        # signal checking
+        if signal == 'buy':
+            # open the position and initialize the trade dictionary
+            df.loc[i, 'open_position'] = True
+            trade['open_date'] = df.index[i]
+            trade['entry_price'] = df.iloc[i]['Open']
+            trade['bars'] = 1
+            signal = 'flat'
 
-            elif signal == 'sell':
-                # close the position, store the trade and calculate the profit
-                df.loc[i, 'open_position'] = False
-                trade['close_date'] = df.index[i]
-                trade['sell_price'] = df.iloc[i]['Open']
-                trade['profit'] = (trade['sell_price'] -
-                                   trade['entry_price']) / trade['entry_price']
-                signal = 'flat'
-                all_trades.append(trade)
-                logger.info(
-                    f"CLOSE TRADE at {df.index[i]} at price {trade['sell_price']}. Profit: {trade['profit']:.4f}")
-                trade = {}
+        elif signal == 'sell':
+            # close the position, store the trade and calculate the profit
+            df.loc[i, 'open_position'] = False
+            trade['close_date'] = df.index[i]
+            trade['sell_price'] = df.iloc[i]['Open']
+            trade['profit'] = (trade['sell_price'] -
+                               trade['entry_price']) / trade['entry_price']
+            signal = 'flat'
+            all_trades.append(trade)
+            trade = {}
 
             else:
                 if i != 0:

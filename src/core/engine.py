@@ -2,6 +2,9 @@ import pandas as pd
 from ..strategy.strategy import Strategy
 from .indicators import *
 import yaml
+import logging
+
+logger = logging.getLogger('engine')
 
 
 def translator(signal: bool, info: str) -> str:
@@ -71,45 +74,58 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     trade = {}
     i = 0
     signal = 'flat'
-    avg_loss = -1
-    avg_gain = -1
-    avg_loss_short = -1
-    avg_gain_short = -1
-    avg_loss_long = -1
-    avg_gain_long = -1
+
+    # indicator engines initialization
+    rsi_engine = RSIIndicator(period=lookback_rsi)
+    comp_engine = CompositeRSIIndicator(
+        short_period=short_composite_rsi, long_period=long_composite_rsi)
 
     # computing the indicators on the whole dataset
-    df['rsi'] = rsi(df['Close'], lookback_rsi)
-    df['composite_rsi'] = composite_rsi(
-        df['Close'], short_composite_rsi, long_composite_rsi)
-    df['hurst'] = hurst_exponent(df['Close'], lookback_hurst)
+    '''try:
+        df['rsi'] = rsi(df['Close'], lookback_rsi)
+        df['composite_rsi'] = composite_rsi(
+            df['Close'], short_composite_rsi, long_composite_rsi)
+        df['hurst'] = hurst_exponent(df['Close'], lookback_hurst)
+    except Exception as ind_err:
+        logger.warning(f"Indicator failure: {ind_err}")
+        return {}
+        '''
 
-    while i < len(df):
-        """
-        TO BE CODED
-        df.loc[i, 'rsi'] = rsi(df['Close'], lookback_rsi)
-        df.loc[i, 'composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
-        df.loc[i, 'hurst'] = hurst_exponent(df['Close'], lookback_hurst)
-        """
-        # signal checking
-        if signal == 'buy':
-            # open the position and initialize the trade dictionary
-            df.loc[i, 'open_position'] = True
-            trade['open_date'] = df.index[i]
-            trade['entry_price'] = df.iloc[i]['Open']
-            trade['bars'] = 1
-            signal = 'flat'
+    try:
+        while i < len(df):
+            logger.debug(f'Column number {i}')
+            try:
+                df.loc[i, 'rsi'] = rsi_engine.compute(df['Close'].iloc[:i+1])
+                df.loc[i, 'composite_rsi'] = comp_engine.compute(
+                    df['Close'].iloc[:i+1])
+                df.loc[i, 'hurst'] = hurst_exponent(
+                    df['Close'][:i], lookback_hurst)
+            except Exception as e:
+                logger.warning(f"Indicator failure : {e}")
 
-        elif signal == 'sell':
-            # close the position, store the trade and calculate the profit
-            df.loc[i, 'open_position'] = False
-            trade['close_date'] = df.index[i]
-            trade['sell_price'] = df.iloc[i]['Open']
-            trade['profit'] = (trade['sell_price'] -
-                               trade['entry_price']) / trade['entry_price']
-            signal = 'flat'
-            all_trades.append(trade)
-            trade = {}
+            # signal checking
+            if signal == 'buy':
+                # open the position and initialize the trade dictionary
+                df.loc[i, 'open_position'] = True
+                trade['open_date'] = df.index[i]
+                trade['entry_price'] = df.iloc[i]['Open']
+                trade['bars'] = 1
+                signal = 'flat'
+                logger.info(
+                    f"OPEN TRADE at {df.index[i]} at price {trade['entry_price']}")
+
+            elif signal == 'sell':
+                # close the position, store the trade and calculate the profit
+                df.loc[i, 'open_position'] = False
+                trade['close_date'] = df.index[i]
+                trade['sell_price'] = df.iloc[i]['Open']
+                trade['profit'] = (trade['sell_price'] -
+                                   trade['entry_price']) / trade['entry_price']
+                signal = 'flat'
+                all_trades.append(trade)
+                logger.info(
+                    f"CLOSE TRADE at {df.index[i]} at price {trade['sell_price']}. Profit: {trade['profit']:.4f}")
+                trade = {}
 
             else:
                 if i != 0:

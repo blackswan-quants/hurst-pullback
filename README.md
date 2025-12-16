@@ -52,3 +52,11 @@ Then you can use initialized variables using this syntax:
 ```sh
 config["data"]["clean_NQ"]  # this line select the path of "clean_NQ" which is part of the subset data in the base file
 ```
+
+## Fee Structure
+
+The backtesting system incorporates realistic trading costs through two main components configured in `configs/base.yaml`:
+
+- `commission_per_contract`: Set at **$2.50** per round turn (entry + exit), this parameter reflects typical costs including broker commissions, exchange fees, clearing fees, and regulatory charges for futures (ES, NQ, YM, EMD).
+
+- `slippage_per_contract`: Set at **$15.00** per round turn, this accounts for the difference between expected and actual execution prices. This represents approximately 2-3 ticks of slippage per side across the instruments traded, capturing realistic market impact under normal liquidity conditions. Slippage varies by instrument tick value: ES ($12.50/tick), NQ ($5/tick), YM ($5/tick), and EMD ($10/tick).

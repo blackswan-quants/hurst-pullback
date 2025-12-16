@@ -45,7 +45,7 @@ def run_ablation() -> list:
 
         res = run(df=df, strategy=strategy)
 
-        returns = pd.Series((t["profit"] for t in res)).dropna()
+        returns = pd.Series((t["net_profit"] for t in res)).dropna()
 
         equity_curve = cumulative_return(returns)
 

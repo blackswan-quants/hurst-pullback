@@ -32,7 +32,9 @@ logger: # setting log info
   indicators_level: DEBUG
   loader_level: DEBUG
 transaction_costs: # modify if necessary
-  commission_per_contract: 1.5
+  commission_per_contract: 2.50
   slippage_tickets: 1
+  slippage_per_contract: 15.00
+  contract_size: 1
   point_value: 50
   tick_size: 0.25

@@ -44,10 +44,15 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
         'open_date': The datetime when the trade (purchase) was initiated.
         'close_date': The datetime when the trade (sale) was closed.
         'entry_price': The price at which the asset was bought.
+        'net_entry_price': The price at which the asset was bought computed with commission.
         'sell_price': The price at which the asset was sold.
+        'net_sell_price': The price at which the asset was sold considering also commission.
         'profit': The percentage return on the trade 
                       (e.g., (sell_price / entry_price - 1)).
+        'net_profit': The percentage return on the trade considering also commission.
         'bars': The number of bars each trade was active for.
+        'commission_cost': The cost paid for each position opened.
+        'slippage_cost': The slippage cost when closing position. 
         }
     """
     logger.info(f"Starting backtest on {len(df)} rows.")
@@ -58,6 +63,9 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
         short_composite_rsi = cfg['indicators']['short_composite_rsi']
         long_composite_rsi = cfg['indicators']['long_composite_rsi']
         lookback_hurst = cfg['indicators']['hurst_window']
+        commission_per_contract = cfg['transaction_costs']['commission_per_contract']
+        contract_size = cfg['transaction_costs']['contract_size']
+        slippage_per_contract = cfg['transaction_costs']['slippage_per_contract']
         ######
     except Exception as e:
         logger.error(f"Failed to load data from strategy: {e}")
@@ -108,6 +116,7 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
                 df.loc[i, 'open_position'] = True
                 trade['open_date'] = df.index[i]
                 trade['entry_price'] = df.iloc[i]['Open']
+                trade['net_entry_price'] = df.iloc[i]['Open'] + (commission_per_contract / contract_size)
                 trade['bars'] = 1
                 signal = 'flat'
                 logger.info(
@@ -118,8 +127,13 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
                 df.loc[i, 'open_position'] = False
                 trade['close_date'] = df.index[i]
                 trade['sell_price'] = df.iloc[i]['Open']
+                trade['net_sell_price'] = df.iloc[i]['Open'] - (commission_per_contract + slippage_per_contract) / contract_size
                 trade['profit'] = (trade['sell_price'] -
                                    trade['entry_price']) / trade['entry_price']
+                trade['net_profit'] = (trade['net_sell_price'] -
+                                   trade['net_entry_price']) / trade['net_entry_price']
+                trade['commission_cost'] = 2 * (commission_per_contract / contract_size)
+                trade['slippage_cost'] = (slippage_per_contract / contract_size)
                 signal = 'flat'
                 all_trades.append(trade)
                 logger.info(

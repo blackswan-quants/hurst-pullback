@@ -74,12 +74,11 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     trade = {}
     i = 0
     signal = 'flat'
-    avg_loss = -1
-    avg_gain = -1
-    avg_loss_short = -1
-    avg_gain_short = -1
-    avg_loss_long = -1
-    avg_gain_long = -1
+
+    # indicator engines initialization
+    rsi_engine = RSIIndicator(period=lookback_rsi)
+    comp_engine = CompositeRSIIndicator(
+        short_period=short_composite_rsi, long_period=long_composite_rsi)
 
     # computing the indicators on the whole dataset
     '''try:
@@ -96,12 +95,14 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
         while i < len(df):
             logger.debug(f'Column number {i}')
             try:
-                df.loc[i, 'rsi'] , avg_gain , avg_loss = rsi(df['Close'][:i], avg_gain , avg_loss, lookback_rsi)
-                df.loc[i, 'composite_rsi'] , avg_gain_short, avg_loss_short , avg_gain_long , avg_loss_long = composite_rsi(df['Close'][:i],avg_gain_short, avg_loss_short , avg_gain_long , avg_loss_long, short_composite_rsi, long_composite_rsi)
-                df.loc[i, 'hurst'] = hurst_exponent(df['Close'][:i], lookback_hurst)
+                df.loc[i, 'rsi'] = rsi_engine.compute(df['Close'].iloc[:i+1])
+                df.loc[i, 'composite_rsi'] = comp_engine.compute(
+                    df['Close'].iloc[:i+1])
+                df.loc[i, 'hurst'] = hurst_exponent(
+                    df['Close'][:i], lookback_hurst)
             except Exception as e:
                 logger.warning(f"Indicator failure : {e}")
-        
+
             # signal checking
             if signal == 'buy':
                 # open the position and initialize the trade dictionary

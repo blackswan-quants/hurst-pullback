@@ -44,7 +44,7 @@ def test_commission_cost(base_config):
 
     for trade in base_config:
         commission = 2 * (commission_cost / contract_size)
-        expected_commission = trade['sell_price'] - trade['entry_price'] - (slippage_cost / contract_size) - (trade['net_sell_price'] - trade['net_entry_price'])
+        expected_commission = trade['sell_price'] - trade['entry_price'] - 2 * (slippage_cost / contract_size) - (trade['net_sell_price'] - trade['net_entry_price'])
 
         assert pytest.approx(expected_commission) == commission
 
@@ -56,7 +56,7 @@ def test_slippage_cost(base_config):
     slippage_cost = data['transaction_costs']['slippage_per_contract']
 
     for trade in base_config:
-        slippage = (slippage_cost / contract_size)
+        slippage = 2 * (slippage_cost / contract_size)
         expected_slippage = trade['sell_price'] - trade['entry_price'] -  2 * (commission_cost / contract_size) - (trade['net_sell_price'] - trade['net_entry_price'])
 
         assert pytest.approx(expected_slippage) == slippage

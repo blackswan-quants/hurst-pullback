@@ -34,7 +34,7 @@ logger: # setting log info
 transaction_costs: # modify if necessary
   commission_per_contract: 2.50
   slippage_tickets: 1
-  slippage_per_contract: 15.00
+  slippage_per_contract: 2.50
   contract_size: 1
   point_value: 50
   tick_size: 0.25

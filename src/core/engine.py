@@ -116,7 +116,7 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
                 df.loc[i, 'open_position'] = True
                 trade['open_date'] = df.index[i]
                 trade['entry_price'] = df.iloc[i]['Open']
-                trade['net_entry_price'] = df.iloc[i]['Open'] + (commission_per_contract / contract_size)
+                trade['net_entry_price'] = df.iloc[i]['Open'] + ((commission_per_contract + slippage_per_contract) / contract_size)
                 trade['bars'] = 1
                 signal = 'flat'
                 logger.info(
@@ -133,7 +133,7 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
                 trade['net_profit'] = (trade['net_sell_price'] -
                                    trade['net_entry_price']) / trade['net_entry_price']
                 trade['commission_cost'] = 2 * (commission_per_contract / contract_size)
-                trade['slippage_cost'] = (slippage_per_contract / contract_size)
+                trade['slippage_cost'] = 2 * (slippage_per_contract / contract_size)
                 signal = 'flat'
                 all_trades.append(trade)
                 logger.info(

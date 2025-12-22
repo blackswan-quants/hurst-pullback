@@ -4,6 +4,10 @@ import sys
 from pathlib import Path
 import pandas as pd
 
+import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
+from calendar import month_name
+
 # Handle both module and direct execution
 try:
     from ..strategy.strategy import Strategy
@@ -13,6 +17,149 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from src.strategy.strategy import Strategy
     from src.core.engine import run
+
+
+def plot_trade_metrics(trades, metrics=None, enable_plots: bool = False) -> None:
+    """
+    Plot key metrics for completed trades:
+    - Density (normalized frequency) of months, years, and weekdays
+      when trades were OPENED and CLOSED.
+
+    The function is robust to different column names for timestamps.
+    It looks for typical columns like: 'entry_time'/'exit_time',
+    'open_time'/'close_time', 'entry_dt'/'exit_dt'.
+
+    Parameters
+    ----------
+    trades : pd.DataFrame | list[dict] | Any iterable
+        Collection of completed trades. Must contain at least entry/exit timestamps.
+    enable_plots : bool
+        If False, the function returns immediately without plotting.
+    """
+    if not enable_plots:
+        return
+
+    # Convert to DataFrame if needed
+    if not isinstance(trades, pd.DataFrame):
+        try:
+            trades = pd.DataFrame(trades)
+        except Exception:
+            logging.warning("Could not convert trades to DataFrame; skipping plots.")
+            return
+
+    # Detect entry/exit columns
+    candidate_entry_cols = ["entry_time", "open_time", "entry_dt", "opened_at", "open_dt", "entry_timestamp"]
+    candidate_exit_cols  = ["exit_time", "close_time", "exit_dt", "closed_at", "close_dt", "exit_timestamp"]
+
+    entry_col = next((c for c in candidate_entry_cols if c in trades.columns), None)
+    exit_col  = next((c for c in candidate_exit_cols  if c in trades.columns), None)
+
+    if entry_col is None:
+        raise ValueError(
+            f"Missing entry timestamp column. Expected one of: {candidate_entry_cols}. "
+            f"Found columns: {list(trades.columns)}"
+        )
+
+    if exit_col is None:
+        raise ValueError(
+            f"Missing exit timestamp column. Expected one of: {candidate_exit_cols}. "
+            f"Found columns: {list(trades.columns)}"
+    )
+
+    logging.info(f"Using entry column: '{entry_col}' and exit column: '{exit_col}'")
+
+    # Coerce to datetime
+    for c in [entry_col, exit_col]:
+        if not pd.api.types.is_datetime64_any_dtype(trades[c]):
+            try:
+                trades[c] = pd.to_datetime(trades[c], utc=True, errors="coerce")
+            except Exception:
+                logging.warning(f"Failed to parse datetime in column '{c}'. Skipping plots.")
+                return
+
+    # Helper for categorical density plots
+    def _density(ax, series, title, categories_order=None):
+        s = series.dropna()
+        if categories_order is not None:
+            # Ensure all categories appear (even if zero)
+            counts = s.value_counts(normalize=True).reindex(categories_order, fill_value=0.0)
+            ax.bar(counts.index, counts.values)
+            ax.set_xticklabels(counts.index, rotation=45, ha="right")
+        else:
+            counts = s.value_counts(normalize=True).sort_index()
+            ax.bar(counts.index, counts.values)
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+        ax.set_title(title)
+        ax.set_ylabel("Density")
+        ax.grid(True, axis="y", alpha=0.3)
+
+    # Derive time components
+    opened = trades[entry_col].dt.tz_convert(None) if trades[entry_col].dt.tz is not None else trades[entry_col]
+    closed = trades[exit_col].dt.tz_convert(None) if trades[exit_col].dt.tz is not None else trades[exit_col]
+
+    # Build ordered categories
+    month_order = [m for m in month_name if m]  # ['January', ..., 'December']
+    weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    opened_month = opened.dt.month.apply(lambda m: month_order[m-1])
+    closed_month = closed.dt.month.apply(lambda m: month_order[m-1])
+    opened_year  = opened.dt.year.astype(str)
+    closed_year  = closed.dt.year.astype(str)
+    opened_wday  = opened.dt.day_name()
+    closed_wday  = closed.dt.day_name()
+
+    # Create subplots: 2 rows (opened/closed) x 3 columns (month/year/weekday)
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(16, 9))
+    fig.suptitle("Trade Timing Density — Opened vs Closed", fontsize=14)
+
+    _density(axes[0, 0], opened_month, "Opened — by Month", categories_order=month_order)
+    _density(axes[0, 1], opened_year,  "Opened — by Year")
+    _density(axes[0, 2], opened_wday,  "Opened — by Weekday", categories_order=weekday_order)
+
+    _density(axes[1, 0], closed_month, "Closed — by Month", categories_order=month_order)
+    _density(axes[1, 1], closed_year,  "Closed — by Year")
+    _density(axes[1, 2], closed_wday,  "Closed — by Weekday", categories_order=weekday_order)
+
+    plt.tight_layout()
+    plt.show()
+
+    if metrics is not None:
+        try:
+            def _get_first(d, keys):
+                for k in keys:
+                    if isinstance(d, dict) and k in d and d[k] is not None:
+                        return d[k]
+                return None
+
+            equity = _get_first(metrics, ["equity_curve", "equity", "equity_series", "portfolio_value", "equity_values"])
+            buyhold = _get_first(metrics, ["buy_hold_curve", "buy_hold", "buy_and_hold", "buy&hold", "benchmark_curve", "benchmark", "bh_curve"])
+
+            sharpe = _get_first(metrics, ["sharpe_ratio", "sharpe", "sharpe_ratio", "Sharpe", "Sharpe Ratio"])
+            max_dd = _get_first(metrics, ["max_drawdown", "max_dd", "Max Drawdown", "MaxDD", "MDD"])
+
+            fig2, ax = plt.subplots(figsize=(14, 6))
+            if equity is not None:
+                ax.plot(pd.Series(equity), label="Equity")
+            if buyhold is not None:
+                ax.plot(pd.Series(buyhold), label="Buy & Hold")
+
+            title_parts = ["Equity Curve"]
+            if sharpe is not None:
+                title_parts.append(f"Sharpe: {float(sharpe):.3f}")
+            if max_dd is not None:
+                title_parts.append(f"Max DD: {float(max_dd):.3f}")
+            ax.set_title(" — ".join(title_parts))
+
+            ax.set_xlabel("Step")
+            ax.set_ylabel("Value")
+            ax.grid(True, alpha=0.3)
+            if equity is not None or buyhold is not None:
+                ax.legend()
+            plt.tight_layout()
+            plt.show()
+        except Exception:
+            logging.warning("Failed to plot equity/buy&hold/metrics; skipping.")
+
 
 def main() -> None:
     """
@@ -24,7 +171,7 @@ def main() -> None:
     4. Run backtest through engine.
     5. Print resulting equity and metrics.
     """
-    # Get project root directory
+   
     project_root = Path(__file__).parent.parent.parent
     
     config_path = project_root / "configs" / "base.yaml"
@@ -44,7 +191,7 @@ def main() -> None:
         'loader' : 'loader_level'
     }
 
-    print("\n--- Starting Logger Configuration ---") # Used for visibility during runtime
+    print("\n--- Starting Logger Configuration ---") 
 
     for logger_name, config_key in LOGGER_MAP.items():
         
@@ -65,11 +212,10 @@ def main() -> None:
 
     #### end logging setup ####
 
-    #### dataframe loading ####
+    # dataframe loading
     data_path = project_root / "data" / "clean" / "NQ_clean.csv"
     try:
         df = pd.read_csv(data_path)
-        # Log success
         logging.info('Successfully loaded the dataframe.')
 
     except FileNotFoundError:
@@ -86,9 +232,12 @@ def main() -> None:
     print(f"Completed {len(all_trades)} trades")
     print(all_trades)
 
+    # Toggle from YAML 
+    plot_cfg = data.get("plots", {})
+    plot_trade_metrics_flag = bool(plot_cfg.get("trade_metrics", False))
+    plot_trade_metrics(all_trades, enable_plots=plot_trade_metrics_flag)
+
+
 if __name__ == "__main__":
     main()
 
-
-## cambia gli indicatori e aggiungi opzione per plottare dal main
-# cambia file clean 

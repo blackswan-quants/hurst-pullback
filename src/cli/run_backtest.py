@@ -19,7 +19,7 @@ except ImportError:
     from src.core.engine import run
 
 
-def plot_trade_metrics(trades, enable_plots: bool = False) -> None:
+def plot_trade_metrics(trades, metrics=None, enable_plots: bool = False) -> None:
     """
     Plot key metrics for completed trades:
     - Density (normalized frequency) of months, years, and weekdays
@@ -54,9 +54,19 @@ def plot_trade_metrics(trades, enable_plots: bool = False) -> None:
     entry_col = next((c for c in candidate_entry_cols if c in trades.columns), None)
     exit_col  = next((c for c in candidate_exit_cols  if c in trades.columns), None)
 
-    if entry_col is None or exit_col is None:
-        logging.warning("No compatible timestamp columns found in trades; expected entry/exit columns. Skipping plots.")
-        return
+    if entry_col is None:
+        raise ValueError(
+            f"Missing entry timestamp column. Expected one of: {candidate_entry_cols}. "
+            f"Found columns: {list(trades.columns)}"
+        )
+
+    if exit_col is None:
+        raise ValueError(
+            f"Missing exit timestamp column. Expected one of: {candidate_exit_cols}. "
+            f"Found columns: {list(trades.columns)}"
+    )
+
+    logging.info(f"Using entry column: '{entry_col}' and exit column: '{exit_col}'")
 
     # Coerce to datetime
     for c in [entry_col, exit_col]:
@@ -113,6 +123,43 @@ def plot_trade_metrics(trades, enable_plots: bool = False) -> None:
     plt.tight_layout()
     plt.show()
 
+    if metrics is not None:
+        try:
+            def _get_first(d, keys):
+                for k in keys:
+                    if isinstance(d, dict) and k in d and d[k] is not None:
+                        return d[k]
+                return None
+
+            equity = _get_first(metrics, ["equity_curve", "equity", "equity_series", "portfolio_value", "equity_values"])
+            buyhold = _get_first(metrics, ["buy_hold_curve", "buy_hold", "buy_and_hold", "buy&hold", "benchmark_curve", "benchmark", "bh_curve"])
+
+            sharpe = _get_first(metrics, ["sharpe_ratio", "sharpe", "sharpe_ratio", "Sharpe", "Sharpe Ratio"])
+            max_dd = _get_first(metrics, ["max_drawdown", "max_dd", "Max Drawdown", "MaxDD", "MDD"])
+
+            fig2, ax = plt.subplots(figsize=(14, 6))
+            if equity is not None:
+                ax.plot(pd.Series(equity), label="Equity")
+            if buyhold is not None:
+                ax.plot(pd.Series(buyhold), label="Buy & Hold")
+
+            title_parts = ["Equity Curve"]
+            if sharpe is not None:
+                title_parts.append(f"Sharpe: {float(sharpe):.3f}")
+            if max_dd is not None:
+                title_parts.append(f"Max DD: {float(max_dd):.3f}")
+            ax.set_title(" — ".join(title_parts))
+
+            ax.set_xlabel("Step")
+            ax.set_ylabel("Value")
+            ax.grid(True, alpha=0.3)
+            if equity is not None or buyhold is not None:
+                ax.legend()
+            plt.tight_layout()
+            plt.show()
+        except Exception:
+            logging.warning("Failed to plot equity/buy&hold/metrics; skipping.")
+
 
 def main() -> None:
     """
@@ -124,7 +171,7 @@ def main() -> None:
     4. Run backtest through engine.
     5. Print resulting equity and metrics.
     """
-    # Get project root directory
+   
     project_root = Path(__file__).parent.parent.parent
     
     config_path = project_root / "configs" / "base.yaml"
@@ -144,7 +191,7 @@ def main() -> None:
         'loader' : 'loader_level'
     }
 
-    print("\n--- Starting Logger Configuration ---") # Used for visibility during runtime
+    print("\n--- Starting Logger Configuration ---") 
 
     for logger_name, config_key in LOGGER_MAP.items():
         
@@ -165,11 +212,10 @@ def main() -> None:
 
     #### end logging setup ####
 
-    #### dataframe loading ####
+    # dataframe loading
     data_path = project_root / "data" / "clean" / "NQ_clean.csv"
     try:
         df = pd.read_csv(data_path)
-        # Log success
         logging.info('Successfully loaded the dataframe.')
 
     except FileNotFoundError:
@@ -195,6 +241,3 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-
-## cambia gli indicatori e aggiungi opzione per plottare dal main
-# cambia file clean 

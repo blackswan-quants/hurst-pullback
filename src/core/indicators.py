@@ -1,146 +1,124 @@
 import numpy as np
 import pandas as pd
-from scipy import stats
-import warnings
+
+def _wilder_smoothing(series: pd.Series, period: int) -> pd.Series:
+    """
+    Helper to perform Wilder's smoothing with SMA initialization.
+    Matches TradeStation logic: 
+    If CurrentBar = 1 then Avg = SMA(series, period)
+    Else Avg = Avg[1] + (1/period) * (Value - Avg[1])
+    """
+    if len(series) < period:
+        return pd.Series(index=series.index, dtype=float)
+        
+    smoothed = np.full(len(series), np.nan)
+    sf = 1.0 / period
+    
+    # First valid bar (index = period-1) is the SMA of the first 'period' values
+    first_val = series.iloc[:period].mean()
+    smoothed[period-1] = first_val
+    
+    # Use the recursive formula for the rest
+    series_v = series.values
+    for i in range(period, len(series)):
+        smoothed[i] = smoothed[i-1] + sf * (series_v[i] - smoothed[i-1])
+        
+    return pd.Series(smoothed, index=series.index)
 
 def rsi(series: pd.Series, period: int = 2) -> pd.Series:
     """
-    Compute Relative Strength Index (RSI) using the recursive Welles Wilder's smoothing method.
-
-    This vectorized function calculates the RSI value for the entire series.
-
-    Args
-        series (pd.Series): The sequence of prices (usually Close prices).
-        period (int): The lookback period (N) for the RSI calculation.
-
-    Returns
-        pd.Series: A series containing the RSI values mapped to the original index.
+    Compute Relative Strength Index (RSI) using the exact TradeStation EasyLanguage formula.
+    SF = 1 / Length
+    NetChgAvg = NetChgAvg[1] + SF * (Change - NetChgAvg[1])
+    TotChgAvg = TotChgAvg[1] + SF * (Abs(Change) - TotChgAvg[1])
+    RSI = 50 * (NetChgAvg / TotChgAvg + 1)
     """
-    if series is None or len(series) == 0:
-        return pd.Series(index=series.index if series is not None else [], dtype=float)
+    if series is None or len(series) <= period:
+        return pd.Series(index=series.index if series is not None else [], dtype=float).fillna(np.nan)
         
-    delta = series.diff()
-    up = delta.clip(lower=0)
-    down = -1 * delta.clip(upper=0)
+    change = series.diff()
     
-    # Use exponential moving average as per Wilder smoothing
-    ema_up = up.ewm(com=period-1, adjust=False).mean()
-    ema_down = down.ewm(com=period-1, adjust=False).mean()
+    # We drop the first NaN to get clean changes
+    change_clean = change.dropna()
     
-    rs = ema_up / ema_down
-    rsi_vals = 100 - (100 / (1 + rs))
+    net_chg_avg = _wilder_smoothing(change_clean, period)
+    tot_chg_avg = _wilder_smoothing(change_clean.abs(), period)
+    
+    # Realign with original index
+    net_chg_avg = net_chg_avg.reindex(series.index)
+    tot_chg_avg = tot_chg_avg.reindex(series.index)
+    
+    with np.errstate(divide='ignore', invalid='ignore'):
+        chg_ratio = net_chg_avg / tot_chg_avg
+        # Replace infs/NaNs to match TS behavior (divide by zero = 0 ChgRatio)
+        chg_ratio = chg_ratio.replace([np.inf, -np.inf], np.nan).fillna(0)
+    
+    rsi_vals = 50 * (chg_ratio + 1)
+    
+    # Standardize warmup (RSI is valid from the bar where SMA is first calculated)
+    rsi_vals.iloc[:period] = np.nan
     
     return rsi_vals
 
-
-def hurst_local(series: pd.Series) -> float:
+def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """
-    Compute the Hurst exponent for a single contiguous series segment using the R/S (rescaled range) method.
-
-    This function splits the input segment into multiple sub-windows (log-spaced sizes), computes the
-    rescaled range R/S for each sub-window size, and estimates the Hurst exponent as the slope of the
-    linear fit on the log10(window_size) vs log10(R/S) values.
-
-    Parameters
-    ----------
-    series : pd.Series
-        1-dimensional sequence of prices (or returns) for which the local Hurst exponent is estimated.
-
-    Returns
-    -------
-    float
-        Estimated Hurst exponent (slope). Returns ``np.nan`` when the segment is too short or when
-        there are insufficient valid R/S observations for regression.
-
-    Notes
-    -----
-    - The implementation requires at least a small number of points (function returns NaN for N < 8).
-    - Uses ddof=0 standard deviation and ignores subsegments with zero variance.
+    Compute Average True Range (ATR) using Wilder's smoothing.
+    Note: Standard EL AverageTrueRange(Len) uses SMA, but ATR(Len) uses Wilder.
     """
-    ts = np.asarray(series, dtype=float) # Convert to numpy array
-    N = len(ts)
-    if N < 8:
-        return np.nan
+    if close is None or len(close) == 0:
+        return pd.Series(index=close.index if close is not None else [], dtype=float).fillna(np.nan)
 
-    # Range of segment sizes
-    max_window = N // 2
-    if max_window < 4:
-        return np.nan
-    window_sizes = np.unique(np.floor(np.logspace(np.log10(4), np.log10(max_window), num=10)).astype(int))
+    tr1 = high - low
+    tr2 = abs(high - close.shift(1))
+    tr3 = abs(low - close.shift(1))
     
-    RS_vals = []
-    used_windows = []
-    for w in window_sizes:
-        if w >= N:
-            continue
-        n_segments = N // w
-        RS_seg = []
-        for i in range(n_segments):
-            seg = ts[i*w:(i+1)*w] # current segment
-            seg = seg - np.mean(seg) # detrend
-            Y = np.cumsum(seg) # cumulative deviation from mean
-            R = np.max(Y) - np.min(Y) # max range of cumulative dev
-            S = np.std(seg) # standard deviation of segment
-            if S != 0:
-                RS_seg.append(R/S)
-        if RS_seg:
-            RS_vals.append(np.mean(RS_seg))
-            used_windows.append(w)
-    if len(RS_vals) < 2:
-        return np.nan
-        
-    # The Hurst exponent is the slope of the log-log plot
-    lx = np.log10(np.array(used_windows))
-    ly = np.log10(RS_vals)
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    tr_clean = tr.dropna()
     
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        slope, _, _, _, _ = stats.linregress(lx, ly) 
-        
-    return slope
+    atr_series = _wilder_smoothing(tr_clean, period)
+    atr_series = atr_series.reindex(high.index)
+    
+    return atr_series
 
-
-def hurst_exponent(series: pd.Series, window: int = 20) -> pd.Series:
+def hurst_exponent(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 20) -> pd.Series:
     """
-    Compute a rolling (moving-window) Hurst exponent series.
+    Fast proxy of Hurst exponent from TradeStation.
+    Verification against benchmark shows it uses SMA-based ATR (AvgTrueRange).
+    H = 100 * ( log(Highest(High, Len) - Lowest(Low, Len)) - log(SMA_ATR(Len)) ) / log(Len)
+    """
+    if close is None or len(close) == 0:
+        return pd.Series(index=close.index if close is not None else [], dtype=float).fillna(np.nan)
 
-    For each time index this function takes the previous `window` observations and runs
-    :func:`hurst_local` to estimate the Hurst exponent on that local window. This produces a
-    time series of Hurst estimates which can be used for regime detection (trend vs mean-reversion).
+    highest_high = high.rolling(window).max()
+    lowest_low = low.rolling(window).min()
+    range_hl = highest_high - lowest_low
 
-    Parameters
-    ----------
-    series : pd.Series
-        Input price (or return) series with a datetime-like index.
-    window : int, optional
-        Rolling window length in number of samples used for each local Hurst estimation (default=20).
+    # Calculate SMA-based ATR for Hurst parity (TradeStation AvgTrueRange built-in)
+    tr1 = high - low
+    tr2 = abs(high - close.shift(1))
+    tr3 = abs(low - close.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    sma_atr = tr.rolling(window).mean()
 
-    Returns
-    -------
-    pd.Series
-        Rolling Hurst values mapped to the original index.
+    # Compute proxy Hurst
+    with np.errstate(divide='ignore', invalid='ignore'):
+        hurst = 100 * (np.log(range_hl) - np.log(sma_atr)) / np.log(window)
+    
+    hurst = hurst.replace([np.inf, -np.inf], 0).fillna(0)
+    
+    # Standardize warmup
+    hurst.iloc[:window] = np.nan 
+    
+    return hurst
+
+def composite_rsi(series: pd.Series, short: int, long: int, w1: float = 0.5, w2: float = 0.5) -> pd.Series:
+    """
+    Computes a Weighted Composite RSI. Default is 50/50.
     """
     if series is None or len(series) == 0:
-        return pd.Series(index=series.index if series is not None else [], dtype=float)
-        
-    return series.rolling(window).apply(hurst_local, raw=False)
-
-def composite_rsi(series: pd.Series, short: int, long: int) -> pd.Series:
-    """
-    Computes a Composite RSI based on 50/50 weights of short and long RSI values.
-
-    Args:
-        series: Price series data
-        short: Lookback period for the short RSI
-        long: Lookback period for the long RSI
-    
-    Returns:
-        pd.Series: Vector array containing composite RSI results
-    """
-    if series is None or len(series) == 0:
-        return pd.Series(index=series.index if series is not None else [], dtype=float)
+        return pd.Series(index=series.index if series is not None else [], dtype=float).fillna(np.nan)
         
     short_rsi = rsi(series, period=short)
     long_rsi = rsi(series, period=long)
     
-    return (0.5 * short_rsi) + (0.5 * long_rsi)
+    return (w1 * short_rsi) + (w2 * long_rsi)

@@ -79,20 +79,16 @@ def cagr(equity_curve: pd.Series, periods_per_year: int = 252) -> float:
     return cagr_value
 
 
-def cumulative_return(returns : pd.Series) -> pd.Series:
-    """""
-    Compute the cumulative return from the series of periodic returns
+def cumulative_return(returns: pd.Series) -> pd.Series:
+    """
+    Compute the cumulative return from a series of periodic returns.
     
-    Parameters
-    --------
-    returns: pd.Series
-    seires of periodic returns
+    Args:
+        returns (pd.Series): Series of periodic returns.
 
-    Output 
-    -------
-    cum_factors: pd.Series
-    series representing the equity curve  
-    """""
+    Returns:
+        pd.Series: Series representing the equity curve.
+    """
     cum_factors = [1.0]
     cum_factor = 1.0
     
@@ -249,3 +245,31 @@ def expectancy(returns: pd.Series) -> float:
     avg_w, avg_l = avg_win_avg_loss(returns)
     
     return (w_rate * avg_w) - (l_rate * abs(avg_l))
+
+def trade_duration_stats(durations: pd.Series) -> tuple:
+    """
+    Compute average, max, and min trade duration.
+    
+    Args:
+        durations (pd.Series): Series of trade durations (e.g. number of bars).
+        
+    Returns:
+        tuple: (avg_duration, max_duration, min_duration)
+    """
+    if durations.empty:
+        return 0.0, 0.0, 0.0
+    return durations.mean(), durations.max(), durations.min()
+
+def extreme_trades(returns: pd.Series) -> tuple:
+    """
+    Compute the maximum winning and maximum losing trade percentage.
+    
+    Args:
+        returns (pd.Series): Series of trade returns.
+        
+    Returns:
+        tuple: (max_win, max_loss)
+    """
+    if returns.empty:
+        return 0.0, 0.0
+    return returns.max(), returns.min()

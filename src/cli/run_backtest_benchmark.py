@@ -16,7 +16,7 @@ except ImportError:
 import matplotlib.pyplot as plt
 import os
 
-def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root: Path, ticker: str = "Strategy") -> None:
+def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root: Path, ticker: str = "Benchmark") -> None:
     """
     Generate and save performance plots with a professional Dark Mode aesthetic.
     """
@@ -48,7 +48,7 @@ def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root:
     ax1.plot(eq_curve_pct.values, label='Cumulative Profit %', color='#10b981', linewidth=2.5, alpha=0.9)
     ax1.fill_between(range(len(eq_curve_pct)), eq_curve_pct.values, 0, color='#10b981', alpha=0.1)
     
-    ax1.set_title(f'{ticker_upper} - STRATEGY EQUITY PERFORMANCE', loc='left', fontsize=16, fontweight='bold', pad=20)
+    ax1.set_title(f'{ticker_upper} (BENCHMARK) - STRATEGY EQUITY PERFORMANCE', loc='left', fontsize=16, fontweight='bold', pad=20)
     ax1.set_ylabel('Return (%)', fontweight='bold')
     ax1.legend(loc='upper left', frameon=False)
     ax1.grid(True, linestyle='--', alpha=0.5)
@@ -66,12 +66,11 @@ def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root:
     ax2.grid(True, linestyle='--', alpha=0.5)
     
     plt.tight_layout(pad=3.0)
-    plt.savefig(report_dir / f"{ticker.lower()}_equity_drawdown.png", dpi=150, bbox_inches='tight')
+    plt.savefig(report_dir / f"benchmark_{ticker.lower()}_equity_drawdown.png", dpi=150, bbox_inches='tight')
     plt.close()
     
     # 2. Trade Distribution (histogram)
     plt.figure(figsize=(10, 6))
-    ax = plt.gca()
     returns_pct = trades_df['profit'] * 100
     
     # Histogram with emerald/rose split
@@ -85,28 +84,28 @@ def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root:
     plt.axvline(returns_pct.mean(), color='#facc15', linestyle='--', linewidth=2, label=f'Avg Trade: {returns_pct.mean():.2f}%')
     plt.axvline(0, color='#f8fafc', linewidth=1.5, alpha=0.8)
     
-    plt.title(f'{ticker_upper} - DISTRIBUTION OF TRADE RETURNS (%)', loc='left', fontsize=14, fontweight='bold', pad=15)
+    plt.title(f'{ticker_upper} (BENCHMARK) - DISTRIBUTION OF TRADE RETURNS (%)', loc='left', fontsize=14, fontweight='bold', pad=15)
     plt.xlabel('Individual Trade Return %', fontweight='bold')
     plt.ylabel('Frequency', fontweight='bold')
     plt.legend(frameon=False)
     plt.grid(True, linestyle='--', alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(report_dir / f"{ticker.lower()}_trade_distribution.png", dpi=150, bbox_inches='tight')
+    plt.savefig(report_dir / f"benchmark_{ticker.lower()}_trade_distribution.png", dpi=150, bbox_inches='tight')
     plt.close()
     
-    print(f"\n[SUCCESS] {ticker_upper} professional charts saved to: {report_dir}")
+    print(f"\n[SUCCESS] {ticker_upper} benchmark charts saved to: {report_dir}")
 
 def main() -> None:
     """
-    Main entrypoint for executing a single backtest.
+    Main entrypoint for executing a backtest using benchmark data.
     Steps:
     1. Load YAML configuration.
-    2. Load and clean data.
-    3. Initialize Strategy instance.
-    4. Run backtest through engine.
-    5. Print resulting equity and metrics.
-    6. Generate visualization plots.
+    2. Load benchmark data from easylanguage_indicators.
+    3. Map benchmark columns to strategy expected names.
+    4. Initialize Strategy instance.
+    5. Run backtest through engine.
+    6. Print resulting equity and metrics.
     """
     # Get project root directory
     project_root = Path(__file__).parent.parent.parent
@@ -116,22 +115,29 @@ def main() -> None:
         data = yaml.safe_load(file)
     
     #### dataframe loading ####
-    data_path = project_root / "data" / "raw" / "ES.csv"
-    ticker = data_path.stem # Extracts "ES"
+    # Use ES benchmark by default
+    data_path = project_root / "data" / "easylanguage_indicators" / "indicators_plot_ES.csv"
+    ticker = "ES"
     
     try:
         df = pd.read_csv(data_path)
     except FileNotFoundError:
-        print(f'File not found: {data_path}. Cannot load the dataframe.')
+        print(f'File not found: {data_path}. Cannot load the benchmark dataframe.')
         return
     except Exception as e:
         print(f'An unexpected error occurred during file loading: {e}')
         return
+
+    # Map benchmark columns
+    df = df.rename(columns={
+        'CompositeRSI': 'composite_rsi',
+        'HurstExponent': 'hurst'
+    })
     
     #### backtest running ####
     strategy = Strategy(data)
     all_trades = run(df, strategy)
-    print(f"Completed {len(all_trades)} trades for {ticker}")
+    print(f"Completed {len(all_trades)} trades (Benchmark Data)")
     
     if len(all_trades) == 0:
         print("No trades executed. Cannot calculate metrics.")
@@ -167,7 +173,7 @@ def main() -> None:
 
     # Output Formatting Block
     print("\n" + "="*45)
-    print(f"{f'BACKTEST PERFORMANCE: {ticker}':^45}")
+    print(f"{f'BENCHMARK PERFORMANCE: {ticker}':^45}")
     print("="*45)
     print(f"{'OVERALL PERFORMANCE':^45}")
     print("-" * 45)
@@ -227,5 +233,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

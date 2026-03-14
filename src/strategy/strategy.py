@@ -68,13 +68,14 @@ class Strategy:
     def entry_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
         """
         Evaluate entry conditions for the current bar.
-        Input:
-        df (pd.DataFrame): DataFrame with indicators.
-        i (int): Current bar index.
-        state (dict): Position state (flat or long).
-        logging_flag (bool): Enable logging.
-        Output:
-        bool: True if long entry condition is met.
+        
+        Args:
+            df (pd.DataFrame): DataFrame with indicators.
+            i (int): Current bar index.
+            state (dict): Position state (flat or long).
+            
+        Returns:
+            bool: True if long entry condition is met.
         """
         try:
             if i >= len(df):
@@ -121,58 +122,57 @@ class Strategy:
             print(f"Strategy Entry Crash at index {i}: {e}")
             return False
 
-    def exit_signal(self, df: pd.DataFrame, i: int, state: dict) -> bool:
+    def exit_signal(self, df: pd.DataFrame, i: int, state: dict) -> tuple[bool, str]:
         """
         Evaluate exit conditions for an open trade.
-        Input:
-        df (pd.DataFrame): DataFrame with indicators.
-        i (int): Current bar index.
-        state (dict): Dictionary containing current position info.
-        logging_flag (bool): Enable logging.
-        Output:
-        bool: True if exit condition is met.
+        
+        Args:
+            df (pd.DataFrame): DataFrame with indicators.
+            i (int): Current bar index.
+            state (dict): Dictionary containing current position info.
+            
+        Returns:
+            tuple[bool, str]: (Decision (True/False), Reason for exit).
         """
         try:
             if i >= len(df):
-                return False
+                return False, ""
 
-            exit_position = False
             # Get exit_thresholds config
             exits_cfg = self.exit_thresholds
 
             # Time exit check
-            if 'bars' not in state.keys():
+            if 'bars' not in state:
                 print("'bars' number is NOT in state dictionary!")
             elif 'max_bars_in_trade' not in exits_cfg:
                 print("The parameters 'max_bars_in_trade' is NOT in the configuration dictionary!")
             elif self.ablation['use_time_exit'] and should_exit(state, exits_cfg):
-                exit_position = True
+                return True, "Time Exit"
 
             # profit exit check
-            if not exit_position:
-                if 'entry_price' not in state.keys():
-                    print("'entry_price' is NOT in state dictionary!")
-                elif 'bars' not in state.keys():
-                    print("'bars' is NOT in state dictionary!")
-                elif 'max_profitable_closes' not in exits_cfg:
-                    print("The parameters 'max_profitable_closes' is NOT in the configuration dictionary!")
-                elif self.ablation['use_take_profit'] and prof_exit(df, i, state, exits_cfg):
-                    exit_position = True
+            if 'entry_price' not in state:
+                print("'entry_price' is NOT in state dictionary!")
+            elif 'bars' not in state:
+                # redundant but keeping for safety
+                pass 
+            elif 'max_profitable_closes' not in exits_cfg:
+                print("The parameters 'max_profitable_closes' is NOT in the configuration dictionary!")
+            elif self.ablation['use_take_profit'] and prof_exit(df, i, state, exits_cfg):
+                return True, "Take Profit"
 
             # composite rsi check
-            if not exit_position:
-                if 'composite_rsi' not in df.columns:
-                    print("'composite_rsi' is NOT in the dataframe!")
-                elif 'composite_rsi_threshold' not in exits_cfg:
-                    print("The parameters composite_rsi_threshold is NOT in the configuration dictionary!")
-                elif self.ablation['use_composite_rsi']:
-                    if pd.isna(df.iloc[i]['composite_rsi']):
-                        return False
-                    if rsi_exit(df, i, exits_cfg):
-                        exit_position = True
+            if 'composite_rsi' not in df.columns:
+                print("'composite_rsi' is NOT in the dataframe!")
+            elif 'composite_rsi_threshold' not in exits_cfg:
+                print("The parameters composite_rsi_threshold is NOT in the configuration dictionary!")
+            elif self.ablation['use_composite_rsi']:
+                if pd.isna(df.iloc[i]['composite_rsi']):
+                    return False, ""
+                if rsi_exit(df, i, exits_cfg):
+                    return True, "Composite RSI"
 
-            return exit_position
+            return False, ""
 
         except Exception as e:
             print(f"Exit Signal Crash at index {i}: {e}")
-            return False
+            return False, "Error"

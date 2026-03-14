@@ -220,6 +220,8 @@ def main():
         df_oos = window_df.iloc[split_idx:].copy().reset_index(drop=True)
         
         print(f"\nWINDOW {w+1}/{num_windows}: IS {len(df_is)} bars, OOS {len(df_oos)} bars")
+        print(f"{'Value':>8} | {'Profit %':>10} | {'Sharpe':>8} | {'Win%':>8} | {'Trades':>6}")
+        print("-" * 50)
         
         # Optimize IS
         best_val = None
@@ -239,11 +241,16 @@ def main():
                 t_df = pd.DataFrame(trades)
                 eq = metrics.cumulative_return(t_df['profit'])
                 perf = get_performance_summary(trades, t_df['profit'], eq)
+                
+                print(f"{actual_val:>8} | {perf['Profit %']:>10.2f}% | {perf['Sharpe']:>8.2f} | {perf['Win Rate']:>7.1f}% | {perf['Trades']:>6}")
+                
                 if perf['Profit %'] > max_profit:
                     max_profit = perf['Profit %']
                     best_val = actual_val
                     best_is_perf = perf
                     best_is_eq = eq
+            else:
+                print(f"{actual_val:>8} | {'No Trades':^37}")
         
         if best_val is None:
             print(f" [!] No trades found in In-Sample Window {w+1}")

@@ -97,12 +97,14 @@ def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root:
     
     print(f"\n[SUCCESS] {ticker_upper} professional charts saved to: {report_dir}")
 
+import argparse
+
 def main() -> None:
     """
     Main entrypoint for executing a single backtest.
     Steps:
     1. Load YAML configuration.
-    2. Load and clean data.
+    2. Load and clean data based on CLI asset input.
     3. Initialize Strategy instance.
     4. Run backtest through engine.
     5. Print resulting equity and metrics.
@@ -111,19 +113,36 @@ def main() -> None:
     # Get project root directory
     project_root = Path(__file__).parent.parent.parent
     
+    # 1. Discover available assets
+    data_dir = project_root / "data" / "raw"
+    available_assets = [f.stem for f in data_dir.glob("*.csv")]
+    
+    # 2. CLI Argument Parsing
+    parser = argparse.ArgumentParser(description="Run Hurst Pullback Backtest on a specific asset.")
+    parser.add_argument(
+        "--asset", "-a", 
+        type=str, 
+        default="ES", 
+        help=f"Ticker symbol to backtest. Available: {', '.join(available_assets)}"
+    )
+    args = parser.parse_args()
+    
+    ticker = args.asset.upper()
+    
+    if ticker not in available_assets:
+        print(f"\n[ERROR] Asset '{ticker}' not found in {data_dir}")
+        print(f"Available assets: {', '.join(available_assets)}")
+        return
+
     config_path = project_root / "configs" / "base.yaml"
     with open(config_path, 'r') as file:
         data = yaml.safe_load(file)
     
     #### dataframe loading ####
-    data_path = project_root / "data" / "raw" / "ES.csv"
-    ticker = data_path.stem # Extracts "ES"
+    data_path = data_dir / f"{ticker}.csv"
     
     try:
         df = pd.read_csv(data_path)
-    except FileNotFoundError:
-        print(f'File not found: {data_path}. Cannot load the dataframe.')
-        return
     except Exception as e:
         print(f'An unexpected error occurred during file loading: {e}')
         return

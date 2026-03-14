@@ -15,7 +15,7 @@ entry_thresholds: # setting the interval for RSI
 exit_thresholds: # setting the exit criteria
   max_profitable_closes: 5
   max_bars_in_trade: 11
-  composite_rsi_threshold: 0.5
+  composite_rsi_threshold: 50.0
 ablation: # setting ablation boolean values to make testing and parameters isolation robust
   use_rsi: true
   use_hurst: true

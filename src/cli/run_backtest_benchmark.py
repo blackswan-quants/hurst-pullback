@@ -96,12 +96,14 @@ def plot_performance(trades_df: pd.DataFrame, eq_curve: pd.Series, project_root:
     
     print(f"\n[SUCCESS] {ticker_upper} benchmark charts saved to: {report_dir}")
 
+import argparse
+
 def main() -> None:
     """
     Main entrypoint for executing a backtest using benchmark data.
     Steps:
     1. Load YAML configuration.
-    2. Load benchmark data from easylanguage_indicators.
+    2. Load benchmark data from easylanguage_indicators based on CLI asset input.
     3. Map benchmark columns to strategy expected names.
     4. Initialize Strategy instance.
     5. Run backtest through engine.
@@ -110,20 +112,42 @@ def main() -> None:
     # Get project root directory
     project_root = Path(__file__).parent.parent.parent
     
+    # 1. Discover available assets from benchmark filenames
+    data_dir = project_root / "data" / "easylanguage_indicators"
+    # Files are named indicators_plot_TICKER.csv
+    available_assets = []
+    if data_dir.exists():
+        for f in data_dir.glob("indicators_plot_*.csv"):
+            # Extract ticker from indicators_plot_ES.csv
+            ticker_part = f.stem.replace("indicators_plot_", "")
+            available_assets.append(ticker_part)
+    
+    # 2. CLI Argument Parsing
+    parser = argparse.ArgumentParser(description="Run Hurst Pullback Benchmark on a specific asset.")
+    parser.add_argument(
+        "--asset", "-a", 
+        type=str, 
+        default="ES", 
+        help=f"Ticker symbol to benchmark. Available: {', '.join(available_assets)}"
+    )
+    args = parser.parse_args()
+    
+    ticker = args.asset.upper()
+    
+    if ticker not in available_assets:
+        print(f"\n[ERROR] Benchmark data for '{ticker}' not found in {data_dir}")
+        print(f"Available benchmark assets: {', '.join(available_assets)}")
+        return
+
     config_path = project_root / "configs" / "base.yaml"
     with open(config_path, 'r') as file:
         data = yaml.safe_load(file)
     
     #### dataframe loading ####
-    # Use ES benchmark by default
-    data_path = project_root / "data" / "easylanguage_indicators" / "indicators_plot_ES.csv"
-    ticker = "ES"
+    data_path = data_dir / f"indicators_plot_{ticker}.csv"
     
     try:
         df = pd.read_csv(data_path)
-    except FileNotFoundError:
-        print(f'File not found: {data_path}. Cannot load the benchmark dataframe.')
-        return
     except Exception as e:
         print(f'An unexpected error occurred during file loading: {e}')
         return

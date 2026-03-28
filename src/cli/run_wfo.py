@@ -197,7 +197,7 @@ def main():
     
     # Load Data
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / "data" / "raw" / "NQ.csv"
+    data_path = project_root / "data" / "raw" / "ES.csv"
     df_full = pd.read_csv(data_path)
     
     # Load Config for default thresholds

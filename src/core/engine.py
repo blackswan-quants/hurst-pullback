@@ -1,10 +1,8 @@
 import pandas as pd
 from ..strategy.strategy import Strategy
 from .indicators import *
-import yaml 
 
-
-def translator(signal : bool, info : str) -> str:
+def translator(signal: bool, info: str) -> str:
     """
     Translate boolean output of entry and exit signal functions into trading signals
     Input:
@@ -15,10 +13,11 @@ def translator(signal : bool, info : str) -> str:
     """
     if not signal:
         return 'flat'
-    if info=='exit':
+    if info == 'exit':
         return 'sell'
-    elif info=='entry':
+    elif info == 'entry':
         return 'buy'
+
 
 def run(df: pd.DataFrame, strategy: Strategy) -> dict:
     """
@@ -46,79 +45,92 @@ def run(df: pd.DataFrame, strategy: Strategy) -> dict:
         'bars': The number of bars each trade was active for.
         }
     """
-    # getting strategy settings via strategy object
-    cfg = strategy.get_cfg()
-    lookback_rsi = cfg['indicators']['rsi_period']
-    short_composite_rsi = cfg['indicators']['short_composite_rsi']
-    long_composite_rsi = cfg['indicators']['long_composite_rsi']
-    lookback_hurst = cfg['indicators']['hurst_window']
-    ######
+    try:
+        # getting strategy settings via strategy object
+        cfg = strategy.get_cfg()
+        lookback_rsi = cfg['indicators']['rsi_period']
+        short_composite_rsi = cfg['indicators']['short_composite_rsi']
+        long_composite_rsi = cfg['indicators']['long_composite_rsi']
+        lookback_hurst = cfg['indicators']['hurst_window']
+    except Exception as e:
+        print(f"Failed to load data from strategy: {e}")
+        return {}  # Return empty if config fails
 
+    # dataframe columns initialization and indicator pre-computation
+    # Force a copy to avoid SettingWithCopyWarnings from incoming df slices
+    df = df.copy()
     
-    # dataframe columns initialization 
-    df['rsi'] = 0.0
-    df['composite_rsi'] = 0.0
-    df['hurst'] = 0.0
+    if 'rsi' not in df.columns:
+        df['rsi'] = rsi(df['Close'], lookback_rsi)
+        
+    if 'composite_rsi' not in df.columns:
+        df['composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
+        
+    if 'hurst' not in df.columns:
+        df['hurst'] = hurst_exponent(df['High'], df['Low'], df['Close'], lookback_hurst)
+        
     df['open_position'] = False
 
     # while loop parameters initialization
     all_trades = []
     trade = {}
-    i=0
+    i = 0
     signal = 'flat'
 
-    # computing the indicators on the whole dataset
-    df['rsi'] = rsi(df['Close'], lookback_rsi)
-    df['composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
-    df['hurst'] = hurst_exponent(df['Close'], lookback_hurst)
-
-    while i<len(df):
-        """
-        TO BE CODED
-        df.loc[i, 'rsi'] = rsi(df['Close'], lookback_rsi)
-        df.loc[i, 'composite_rsi'] = composite_rsi(df['Close'], short_composite_rsi, long_composite_rsi)
-        df.loc[i, 'hurst'] = hurst_exponent(df['Close'], lookback_hurst)
-        """
-        #signal checking
-        if signal == 'buy':
-            # open the position and initialize the trade dictionary
-            df.loc[i,'open_position'] = True
-            trade['open_date'] = df.index[i]
-            trade['entry_price'] = df.iloc[i]['Open']
-            trade['bars']=1
-            signal = 'flat'
+    try:
+        while i < len(df):
+            # Current row label
+            idx_label = df.index[i]
             
-        
-        elif signal == 'sell':
-            # close the position, store the trade and calculate the profit
-            df.loc[i,'open_position'] = False
-            trade['close_date'] = df.index[i]
-            trade['sell_price'] = df.iloc[i]['Open']
-            trade['profit'] = (trade['sell_price'] - trade['entry_price']) / trade['entry_price']
-            signal = 'flat'
-            all_trades.append(trade)
-            trade = {}
+            # signal checking
+            if signal == 'buy':
+                # open the position and initialize the trade dictionary
+                df.loc[idx_label, 'open_position'] = True
+                trade['open_date'] = idx_label
+                trade['entry_price'] = df.iloc[i]['Open']
+                trade['bars'] = 1
+                signal = 'flat'
 
-
-        else:
-            if i!=0:
-                df.loc[i,'open_position'] = df.loc[i-1, 'open_position']
-
-            if not trade.get('bars',0)==0:
-                trade['bars'] +=1
+            elif signal == 'sell':
+                # close the position, store the trade and calculate the profit
+                df.loc[idx_label, 'open_position'] = False
+                trade['close_date'] = idx_label
+                trade['sell_price'] = df.iloc[i]['Open']
                 
-            if df.loc[i,'open_position'] == True:
-                signal = strategy.exit_signal(df, i, trade) 
-                signal = translator(signal, 'exit')
+                # Apply Point Drag (Transaction Costs)
+                drag = cfg.get('transaction_costs', {}).get('round_trip_point_drag', 0.0)
+                net_price_diff = (trade['sell_price'] - trade['entry_price']) - drag
+                
+                trade['profit'] = net_price_diff / trade['entry_price']
+                signal = 'flat'
+                all_trades.append(trade)
+                trade = {}
 
-            elif df.loc[i,'open_position']==False:
-                signal = strategy.entry_signal(df, i, trade) 
-                signal = translator(signal,'entry')
+            else:
+                if i != 0:
+                    prev_label = df.index[i-1]
+                    df.loc[idx_label, 'open_position'] = df.loc[prev_label, 'open_position']
 
-        if i >= len(df):
-            break
-        i=i+1
+                if not trade.get('bars', 0) == 0:
+                    trade['bars'] += 1
+
+                try:
+                    if df.loc[idx_label, 'open_position'] == True:
+                        decision, reason = strategy.exit_signal(df, i, trade)
+                        trade['exit_reason'] = reason
+                        signal = translator(decision, 'exit')
+
+                    elif df.loc[idx_label, 'open_position'] == False:
+                        signal = strategy.entry_signal(df, i, trade)
+                        signal = translator(signal, 'entry')
+                except Exception as sig_err:
+                    print(f"Signal evaluation failure at index {i}: {sig_err}")
+                    signal = 'flat'  # Default to flat on error
+            if i >= len(df):
+                break
+            i = i+1
+    except Exception as e:
+        print(f"Engine failure at index {i}: {e}")
+        raise e
+    
     return all_trades
-
-
-

@@ -1,83 +1,151 @@
 import yaml
-from src.core.loader import load_data
-from src.core.engine import run
-from src.strategy.strategy import Strategy
+import sys
+from pathlib import Path
 import pandas as pd 
 import copy
-import logging
-from src.core.metrics import sharpe_ratio, max_drawdown, cagr, cumulative_return
-import numpy as np
-import matplotlib.pyplot as plt
 
-logger = logging.getLogger('ablation')
+# Handle both module and direct execution
+try:
+    from ..strategy.strategy import Strategy
+    from ..core.engine import run
+    from ..core import metrics
+except ImportError:
+    # If running directly, add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.strategy.strategy import Strategy
+    from src.core.engine import run
+    from src.core import metrics
 
-def run_ablation() -> list:
+def main() -> None:
     """
-    Run ablation tests to isolate component contributions.
-    Steps:
-    1. Iterate over all ablation flags.
-    2. Disable one component at a time.
-    3. Re-run backtest and log performance differences.
-    Output:
-    list: A list of object:
-        {
-            'disabled_feature' (string): The control that was disabled
-            'all_trades' (dict): All the trades made with this strategy
-            'metrics' (dict): A list of metrics (sharpe ratio, max drawdown, cagr, win rate, profit factor)
-        }
-    """
+    Execute ablation study to determine the contribution of each strategy component.
     
-    with open("./configs/base.yaml", "r") as f:
+    The study performs:
+    1. A 'Baseline' run with all components enabled.
+    2. 'Ablation' runs where one component is disabled at a time.
+    3. Performance comparison and contribution report generation.
+    """
+    project_root = Path(__file__).parent.parent.parent
+    config_path = project_root / "configs" / "base.yaml"
+    
+    with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    df = pd.read_csv("./" + config['data']['clean_ES']) 
+    # Use the synchronized raw data for ES
+    data_path = project_root / "data" / "raw" / "ES.csv"
+    try:
+        df = pd.read_csv(data_path)
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return
 
-    config_opt = ['use_hurst', 'use_RSI_exit', 'use_take_profit']
-    output = []
+    # All ablation toggles to test
+    ablation_flags = [
+        'use_rsi', 
+        'use_hurst', 
+        'use_composite_rsi', 
+        'use_time_exit', 
+        'use_RSI_exit', 
+        'use_take_profit'
+    ]
 
-    for opt in config_opt:
-        tmp_config = copy.deepcopy(config)
-        if tmp_config['ablation'][opt]:
-            tmp_config['ablation'][opt] = False
+    results = []
+
+    # 1. Baseline Run (Full Strategy)
+    print("Running Baseline (Full Strategy)...")
+    baseline_config = copy.deepcopy(config)
+    # Ensure all are TRUE for baseline
+    for flag in ablation_flags:
+        baseline_config['ablation'][flag] = True
+    
+    baseline_strategy = Strategy(baseline_config)
+    baseline_trades = run(df, baseline_strategy)
+    baseline_metrics = calculate_metrics(baseline_trades)
+    results.append({
+        "component": "FULL_STRATEGY",
+        "metrics": baseline_metrics,
+        "impact": "N/A"
+    })
+
+    # 2. Ablation Runs
+    for flag in ablation_flags:
+        print(f"Ablating {flag}...")
+        test_config = copy.deepcopy(baseline_config)
+        test_config['ablation'][flag] = False
+        
+        test_strategy = Strategy(test_config)
+        test_trades = run(df, test_strategy)
+        test_metrics = calculate_metrics(test_trades)
+        
+        # Calculate impact (Impact = Baseline - Restricted)
+        # Positive impact means the component adds value.
+        cagr_diff = baseline_metrics['cagr'] - test_metrics['cagr']
+        sharpe_diff = baseline_metrics['sharpe'] - test_metrics['sharpe']
+        
+        results.append({
+            "component": flag,
+            "metrics": test_metrics,
+            "impact_cagr": cagr_diff,
+            "impact_sharpe": sharpe_diff
+        })
+
+    # 3. Print Report
+    print_report(results)
+
+def calculate_metrics(trades: list) -> dict:
+    """Helper to calculate consistent metrics for a trade list."""
+    if not trades:
+        return {
+            "count": 0, "win_rate": 0, "profit_factor": 0,
+            "return": 0, "mdd": 0, "cagr": 0, "sharpe": 0
+        }
+    
+    returns_sr = pd.Series([t['profit'] for t in trades])
+    eq_curve = metrics.cumulative_return(returns_sr)
+    
+    cagr_v = metrics.cagr(eq_curve, 252)
+    mdd_v = metrics.max_drawdown(eq_curve)
+    sharpe_v = metrics.sharpe_ratio(returns_sr, 252)
+    
+    return {
+        "count": len(trades),
+        "win_rate": metrics.win_rate(returns_sr),
+        "profit_factor": metrics.profit_factor(returns_sr),
+        "return": (eq_curve.iloc[-1] - 1.0),
+        "mdd": mdd_v,
+        "cagr": cagr_v,
+        "sharpe": sharpe_v
+    }
+
+def print_report(results: list) -> None:
+    """Generate a clean CLI report for the ablation study."""
+    print("\n" + "="*80)
+    print(f"{'COMPONENT ABLATION STUDY':^80}")
+    print("="*80)
+    print(f"{'Feature Disabled':<20} | {'Trades':<6} | {'Win%':<6} | {'CAGR':<8} | {'MDD':<8} | {'Sharpe':<6} | {'Impact'}")
+    print("-" * 80)
+    
+    baseline = results[0]['metrics']
+    
+    for res in results:
+        m = res['metrics']
+        comp = res['component']
+        
+        if comp == "FULL_STRATEGY":
+            impact_str = "[BASELINE]"
+            name = "FULL STRATEGY"
         else:
-            logging.error(f"The logic {opt} was not found!")
-        strategy = Strategy(cfg=tmp_config)
+            # Impact is how much value this component ADDS to the strategy
+            impact_val = res['impact_cagr'] * 100
+            impact_str = f"{impact_val:+.2f}% CAGR"
+            name = comp.replace('use_', '')
 
-        res = run(df=df, strategy=strategy)
+        print(f"{name:<20} | {m['count']:<6} | {m['win_rate']*100:>5.1f}% | {m['cagr']*100:>7.2f}% | {m['mdd']*100:>7.2f}% | {m['sharpe']:>6.2f} | {impact_str}")
 
-        returns = pd.Series((t["net_profit"] for t in res)).dropna()
+    print("="*80)
+    print("\nNOTE: 'Impact' measures how much CAGR is LOST when the component is disabled.")
+    print("Positive Impact indicates the component significantly improves performance.")
+    print("="*80 + "\n")
 
-        equity_curve = cumulative_return(returns)
-
-        win_rate = returns.sum() / len(returns)
-        
-        profit_factor = returns[returns > 0].sum() / abs(returns[returns < 0].sum())
-
-        metrics = {
-            "sharpe_ratio": sharpe_ratio(returns),
-            "max_drawdown": max_drawdown(equity_curve),
-            "cagr": cagr(equity_curve),
-            "equity_curve": equity_curve,
-            "win_rate": win_rate,
-            "profit_factor": profit_factor
-        }
-
-        logging.info("-" * 50)
-        logging.info("\tDISABLED feature: \t %s", opt)
-        logging.info("-" * 50)
-        logging.info(f"\t- sharpe ratio: {metrics['sharpe_ratio']}")
-        logging.info(f"\t- max drawdown: {metrics['max_drawdown']}")
-        logging.info(f"\t- cagr: {metrics['cagr']}")
-        #logging.info(f"\t- equity curve: {metrics['equity_curve']}")
-        logging.info(f"\t- win rate: {metrics['win_rate']}")
-        logging.info(f"\t- profit factor: {metrics['profit_factor']}")
-        logging.info("-" * 50)
-
-        out = {
-            "disaled_feature": opt,
-            "all_trades": res,
-            "metrics": metrics
-        }
-        output.append(out)
-        
-    return output
+if __name__ == "__main__":
+    main()

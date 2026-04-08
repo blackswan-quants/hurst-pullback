@@ -164,8 +164,7 @@ def load_data(path: str) -> pd.DataFrame:
         if df.empty:
             logger.error("The loaded CSV is empty")
             raise ValueError("The loaded CSV is empty")
-        
-        
+
         df.columns = [c.lower() for c in df.columns]
 
         if "date" in df.columns:

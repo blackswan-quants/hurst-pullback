@@ -49,14 +49,20 @@ def main():
             print(f"Asset {ticker} not found at {data_path}")
             continue
             
-        df = pd.read_csv(data_path)
-        
-        # Pre-calculate indicators
-        df['rsi'] = ind.rsi(df['Close'], 2)
-        df['composite_rsi'] = ind.composite_rsi(df['Close'], 2, 24)
-        df['hurst'] = ind.hurst_exponent(df['High'], df['Low'], df['Close'], 20)
-        
-        res = vectorized_run(df, params)
+        # Extract dates for scaling
+        try:
+            if 'Date' in df.columns and 'Time' in df.columns:
+                start_date = pd.to_datetime(df.iloc[0]['Date'] + ' ' + df.iloc[0]['Time'])
+                end_date = pd.to_datetime(df.iloc[-1]['Date'] + ' ' + df.iloc[-1]['Time'])
+            elif 'date' in df.columns:
+                start_date = pd.to_datetime(df.iloc[0]['date'])
+                end_date = pd.to_datetime(df.iloc[-1]['date'])
+            else:
+                start_date, end_date = None, None
+        except Exception:
+            start_date, end_date = None, None
+
+        res = vectorized_run(df, params, start_date=start_date, end_date=end_date)
         
         if res['trades']:
             t_df = pd.DataFrame(res['trades'])

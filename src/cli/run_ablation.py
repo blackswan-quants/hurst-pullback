@@ -51,6 +51,19 @@ def main() -> None:
 
     results = []
 
+    # Extract dates for scaling
+    try:
+        if 'Date' in df.columns and 'Time' in df.columns:
+            start_date = pd.to_datetime(df.iloc[0]['Date'] + ' ' + df.iloc[0]['Time'])
+            end_date = pd.to_datetime(df.iloc[-1]['Date'] + ' ' + df.iloc[-1]['Time'])
+        elif 'date' in df.columns:
+            start_date = pd.to_datetime(df.iloc[0]['date'])
+            end_date = pd.to_datetime(df.iloc[-1]['date'])
+        else:
+            start_date, end_date = None, None
+    except Exception:
+        start_date, end_date = None, None
+
     # 1. Baseline Run (Full Strategy)
     print("Running Baseline (Full Strategy)...")
     baseline_config = copy.deepcopy(config)
@@ -60,7 +73,7 @@ def main() -> None:
     
     baseline_strategy = Strategy(baseline_config)
     baseline_trades = run(df, baseline_strategy)
-    baseline_metrics = calculate_metrics(baseline_trades)
+    baseline_metrics = calculate_metrics(baseline_trades, start_date=start_date, end_date=end_date)
     results.append({
         "component": "FULL_STRATEGY",
         "metrics": baseline_metrics,
@@ -75,7 +88,7 @@ def main() -> None:
         
         test_strategy = Strategy(test_config)
         test_trades = run(df, test_strategy)
-        test_metrics = calculate_metrics(test_trades)
+        test_metrics = calculate_metrics(test_trades, start_date=start_date, end_date=end_date)
         
         # Calculate impact (Impact = Baseline - Restricted)
         # Positive impact means the component adds value.
@@ -92,7 +105,7 @@ def main() -> None:
     # 3. Print Report
     print_report(results)
 
-def calculate_metrics(trades: list) -> dict:
+def calculate_metrics(trades: list, start_date=None, end_date=None) -> dict:
     """Helper to calculate consistent metrics for a trade list."""
     if not trades:
         return {
@@ -103,9 +116,9 @@ def calculate_metrics(trades: list) -> dict:
     returns_sr = pd.Series([t['profit'] for t in trades])
     eq_curve = metrics.cumulative_return(returns_sr)
     
-    cagr_v = metrics.cagr(eq_curve, 252)
+    cagr_v = metrics.cagr(eq_curve, 252, start_date=start_date, end_date=end_date)
     mdd_v = metrics.max_drawdown(eq_curve)
-    sharpe_v = metrics.sharpe_ratio(returns_sr, 252)
+    sharpe_v = metrics.sharpe_ratio(returns_sr, 252, start_date=start_date, end_date=end_date)
     
     return {
         "count": len(trades),

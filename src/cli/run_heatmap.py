@@ -51,6 +51,19 @@ def main():
         'max_bars_in_trade': base_config['exit_thresholds']['max_bars_in_trade']
     }
     
+    # Extract dates for scaling
+    try:
+        if 'Date' in df.columns and 'Time' in df.columns:
+            start_date = pd.to_datetime(df.iloc[0]['Date'] + ' ' + df.iloc[0]['Time'])
+            end_date = pd.to_datetime(df.iloc[-1]['Date'] + ' ' + df.iloc[-1]['Time'])
+        elif 'date' in df.columns:
+            start_date = pd.to_datetime(df.iloc[0]['date'])
+            end_date = pd.to_datetime(df.iloc[-1]['date'])
+        else:
+            start_date, end_date = None, None
+    except Exception:
+        start_date, end_date = None, None
+
     for i, r_low in enumerate(rsi_low_range):
         for j, r_high in enumerate(rsi_high_range):
             if r_high <= r_low:
@@ -61,7 +74,7 @@ def main():
             test_params['rsi_low'] = r_low
             test_params['rsi_high'] = r_high
             
-            res = vectorized_run(df, test_params)
+            res = vectorized_run(df, test_params, start_date=start_date, end_date=end_date)
             results[i, j] = res['sharpe']
             
     # 3. Plotting

@@ -184,11 +184,22 @@ def main() -> None:
     expectancy = metrics.expectancy(returns_sr)
     avg_w, avg_l = metrics.avg_win_avg_loss(returns_sr)
     
+    # Extract Start and End Dates for proper metrics scaling
+    try:
+        # Benchmark data often has "Date" and "Time" columns
+        d_col = [c for c in df.columns if c.lower() == 'date'][0]
+        t_col = [c for c in df.columns if c.lower() == 'time'][0]
+        start_date = pd.to_datetime(df.iloc[0][d_col].strip('"') + ' ' + df.iloc[0][t_col].strip('"'))
+        end_date = pd.to_datetime(df.iloc[-1][d_col].strip('"') + ' ' + df.iloc[-1][t_col].strip('"'))
+    except Exception:
+        start_date = None
+        end_date = None
+
     # Calculate Statistics
-    cagr_v = metrics.cagr(eq_curve, 252)
+    cagr_v = metrics.cagr(eq_curve, 252, start_date=start_date, end_date=end_date)
     mdd_v = metrics.max_drawdown(eq_curve)
-    sharpe_v = metrics.sharpe_ratio(returns_sr, 252)
-    sortino_v = metrics.sortino_ratio(returns_sr, 252)
+    sharpe_v = metrics.sharpe_ratio(returns_sr, 252, start_date=start_date, end_date=end_date)
+    sortino_v = metrics.sortino_ratio(returns_sr, 252, start_date=start_date, end_date=end_date)
     calmar_v = metrics.calmar_ratio(cagr_v, mdd_v)
     
     # New Stats

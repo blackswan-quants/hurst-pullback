@@ -131,7 +131,7 @@ def vectorized_run(df, params, drag=0.5):
         'equity': eq
     }
 
-def optimize_on_is(is_data, param_grid, objective="sharpe"):
+def optimize_on_is(is_data, param_grid, objective="profit"):
     """Step 3 - The inner loop: optimize on IS"""
     best_params, best_score = None, -np.inf
     
@@ -197,7 +197,7 @@ def main():
     
     # Load Data
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / "data" / "raw" / "ES.csv"
+    data_path = project_root / "data" / "raw" / "EMD.csv"
     df_full = pd.read_csv(data_path)
     
     # Load Config for default thresholds
@@ -249,7 +249,7 @@ def main():
             "oos_equity": oos_result["equity"],
         })
         print(f"  Best Params: {best_params}")
-        print(f"  IS Sharpe: {is_score:.2f} | OOS Sharpe: {oos_result['sharpe']:.2f} ({len(oos_result['trades'])} trades)")
+        print(f"  IS Sharpe: {is_score:.2f} | OOS Profit: {oos_result['profit']:.2f} ({len(oos_result['trades'])} trades)")
 
     # Step 5 - Stitch the OOS equity curve
     # Need to handle cumulative multiplier for stitching
@@ -293,9 +293,9 @@ def main():
     oos_sharpes = [r["oos_score"] for r in oos_results]
     x = np.arange(len(folds))
     width = 0.35
-    ax2.bar(x - width/2, is_sharpes, width, label='IS Sharpe', color='#10b981', alpha=0.7)
-    ax2.bar(x + width/2, oos_sharpes, width, label='OOS Sharpe', color='#ef4444', alpha=0.7)
-    ax2.set_title("IS vs OOS Sharpe per Fold")
+    ax2.bar(x - width/2, is_sharpes, width, label='IS Profit', color='#10b981', alpha=0.7)
+    ax2.bar(x + width/2, oos_sharpes, width, label='OOS Profit', color='#ef4444', alpha=0.7)
+    ax2.set_title("IS vs OOS Profit per Fold")
     ax2.set_xticks(x)
     ax2.set_xticklabels([f"F{i+1}" for i in x])
     ax2.legend()

@@ -117,7 +117,7 @@ def plot_unified_equity(windows_data: list, title: str):
     plt.tight_layout()
     plt.show()
 
-def get_performance_summary(all_trades: list, returns_sr: pd.Series, eq_curve: pd.Series) -> dict:
+def get_performance_summary(all_trades: list, returns_sr: pd.Series, eq_curve: pd.Series, start_date=None, end_date=None) -> dict:
     """
     Calculate a set of summary metrics for a backtest run.
     """
@@ -132,7 +132,7 @@ def get_performance_summary(all_trades: list, returns_sr: pd.Series, eq_curve: p
         }
     
     total_return = (eq_curve.iloc[-1] - 1.0) * 100
-    sharpe = metrics.sharpe_ratio(returns_sr, 252)
+    sharpe = metrics.sharpe_ratio(returns_sr, 252, start_date=start_date, end_date=end_date)
     win_r = metrics.win_rate(returns_sr) * 100
     exp = metrics.expectancy(returns_sr)
     
@@ -219,6 +219,23 @@ def main():
         df_is = window_df.iloc[:split_idx].copy().reset_index(drop=True)
         df_oos = window_df.iloc[split_idx:].copy().reset_index(drop=True)
         
+        # Determine window dates for real duration scaling
+        try:
+            if 'Date' in window_df.columns and 'Time' in window_df.columns:
+                is_start = pd.to_datetime(df_is.iloc[0]['Date'] + ' ' + df_is.iloc[0]['Time'])
+                is_end = pd.to_datetime(df_is.iloc[-1]['Date'] + ' ' + df_is.iloc[-1]['Time'])
+                oos_start = pd.to_datetime(df_oos.iloc[0]['Date'] + ' ' + df_oos.iloc[0]['Time'])
+                oos_end = pd.to_datetime(df_oos.iloc[-1]['Date'] + ' ' + df_oos.iloc[-1]['Time'])
+            elif 'date' in window_df.columns:
+                is_start = pd.to_datetime(df_is.iloc[0]['date'])
+                is_end = pd.to_datetime(df_is.iloc[-1]['date'])
+                oos_start = pd.to_datetime(df_oos.iloc[0]['date'])
+                oos_end = pd.to_datetime(df_oos.iloc[-1]['date'])
+            else:
+                is_start, is_end, oos_start, oos_end = None, None, None, None
+        except Exception:
+            is_start, is_end, oos_start, oos_end = None, None, None, None
+
         print(f"\nWINDOW {w+1}/{num_windows}: IS {len(df_is)} bars, OOS {len(df_oos)} bars")
         print(f"{'Value':>8} | {'Profit %':>10} | {'Sharpe':>8} | {'Win%':>8} | {'Trades':>6}")
         print("-" * 50)
@@ -240,7 +257,7 @@ def main():
             if trades:
                 t_df = pd.DataFrame(trades)
                 eq = metrics.cumulative_return(t_df['profit'])
-                perf = get_performance_summary(trades, t_df['profit'], eq)
+                perf = get_performance_summary(trades, t_df['profit'], eq, start_date=is_start, end_date=is_end)
                 
                 print(f"{actual_val:>8} | {perf['Profit %']:>10.2f}% | {perf['Sharpe']:>8.2f} | {perf['Win Rate']:>7.1f}% | {perf['Trades']:>6}")
                 
@@ -265,7 +282,7 @@ def main():
         if oos_trades:
             o_df = pd.DataFrame(oos_trades)
             o_eq = metrics.cumulative_return(o_df['profit'])
-            oos_perf = get_performance_summary(oos_trades, o_df['profit'], o_eq)
+            oos_perf = get_performance_summary(oos_trades, o_df['profit'], o_eq, start_date=oos_start, end_date=oos_end)
             
             windows_results.append({
                 'window': w+1,

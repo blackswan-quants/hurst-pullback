@@ -37,7 +37,7 @@ def make_folds(data, is_bars, oos_bars, anchored=False):
         start += oos_bars   # step forward by exactly one OOS block
     return folds
 
-def vectorized_run(df, params, drag=0.5):
+def vectorized_run(df, params, drag=0.5, start_date=None, end_date=None):
     """
     Lightweight backtest engine for optimization speed.
     Processes a dataframe with pre-calculated indicators.
@@ -119,9 +119,7 @@ def vectorized_run(df, params, drag=0.5):
     
     t_df = pd.DataFrame(trades)
     eq = metrics.cumulative_return(t_df['profit'])
-    # Sharpe needs periodic returns, but for optimization we can use Sharpe of trade returns 
-    # as a proxy or interpolate back to daily. For speed, just use trade Sharpe.
-    sharpe = metrics.sharpe_ratio(t_df['profit'])
+    sharpe = metrics.sharpe_ratio(t_df['profit'], start_date=start_date, end_date=end_date)
     
     # Return full result for OOS stitching
     return {
@@ -135,8 +133,20 @@ def optimize_on_is(is_data, param_grid, objective="sharpe"):
     """Step 3 - The inner loop: optimize on IS"""
     best_params, best_score = None, -np.inf
     
+    # Extract dates for IS scaling
+    try:
+        if 'Date' in is_data.columns and 'Time' in is_data.columns:
+            is_start = pd.to_datetime(is_data.iloc[0]['Date'] + ' ' + is_data.iloc[0]['Time'])
+            is_end = pd.to_datetime(is_data.iloc[-1]['Date'] + ' ' + is_data.iloc[-1]['Time'])
+        elif 'date' in is_data.columns:
+            is_start = pd.to_datetime(is_data.iloc[0]['date'])
+            is_end = pd.to_datetime(is_data.iloc[-1]['date'])
+        else:
+            is_start, is_end = None, None
+    except Exception:
+        is_start, is_end = None, None
+
     # Pre-calculate all Indicators for this IS fold once
-    # This saves massive time vs calculating inside the grid loop
     is_data = is_data.copy()
     # Note: Using hardcoded common windows to avoid recalculating per grid point
     # but since hurst_window varies in user's grid, we might need to handle it.
@@ -172,7 +182,7 @@ def optimize_on_is(is_data, param_grid, objective="sharpe"):
         is_data['composite_rsi'] = cache_comp[(p_comp_s, p_comp_l)]
         
         # Fast backtest
-        result = vectorized_run(is_data, params)
+        result = vectorized_run(is_data, params, start_date=is_start, end_date=is_end)
         score = result[objective]
         
         if score > best_score:
@@ -237,7 +247,20 @@ def main():
         oos_data['hurst'] = ind.hurst_exponent(oos_data['High'], oos_data['Low'], oos_data['Close'], best_params['hurst_window'])
         oos_data['composite_rsi'] = ind.composite_rsi(oos_data['Close'], 2, 24)
         
-        oos_result = vectorized_run(oos_data, best_params)
+        # Extract OOS dates
+        try:
+            if 'Date' in oos_data.columns and 'Time' in oos_data.columns:
+                oos_start = pd.to_datetime(oos_data.iloc[0]['Date'] + ' ' + oos_data.iloc[0]['Time'])
+                oos_end = pd.to_datetime(oos_data.iloc[-1]['Date'] + ' ' + oos_data.iloc[-1]['Time'])
+            elif 'date' in oos_data.columns:
+                oos_start = pd.to_datetime(oos_data.iloc[0]['date'])
+                oos_end = pd.to_datetime(oos_data.iloc[-1]['date'])
+            else:
+                oos_start, oos_end = None, None
+        except Exception:
+            oos_start, oos_end = None, None
+
+        oos_result = vectorized_run(oos_data, best_params, start_date=oos_start, end_date=oos_end)
         
         oos_results.append({
             "fold": i + 1,

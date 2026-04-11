@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from src.core import metrics
 
-def vectorized_run(df, params, drag=0.5):
+def vectorized_run(df, params, drag=0.5, start_date=None, end_date=None):
     """
     Centralized high-performance backtest engine.
     Expects df to have: 'rsi', 'hurst', 'composite_rsi'
@@ -57,7 +57,7 @@ def vectorized_run(df, params, drag=0.5):
     
     t_df = pd.DataFrame(trades)
     eq = metrics.cumulative_return(t_df['profit'])
-    sharpe = metrics.sharpe_ratio(t_df['profit'])
+    sharpe = metrics.sharpe_ratio(t_df['profit'], start_date=start_date, end_date=end_date)
     
     return {
         'trades': trades,

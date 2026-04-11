@@ -21,16 +21,36 @@ def max_drawdown(equity_curve: pd.Series) -> float:
     return drawdowns.min()
 
 
-def sharpe_ratio(returns: pd.Series, periods_per_year: int = 252) -> float:
+def _get_years(total_periods: int, periods_per_year: int, start_date=None, end_date=None, days_in_year: float = 365.25) -> float:
+    """Helper to calculate years elapsed using either count or real dates."""
+    if start_date is not None and end_date is not None:
+        try:
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            # Standard approach: divide total elapsed seconds by the length of a year.
+            # Using 365.25 for Calendar Years is industry standard for CAGR.
+            delta = end - start
+            years = delta.total_seconds() / (days_in_year * 24 * 3600)
+            return max(years, 0.0001) # Avoid division by zero
+        except Exception:
+            pass
+    return total_periods / periods_per_year
+
+
+def sharpe_ratio(returns: pd.Series, periods_per_year: int = 252, start_date=None, end_date=None, days_in_year: float = 365.25) -> float:
     """
     Compute the annualized Sharpe Ratio.
 
     Parameters
     -----
     returns : pd.Series
-        Series of periodic returns.
+        Series of periodic returns (or trade returns).
     periods_per_year : int
-        Sampling frequency (252 daily, 52 weekly, 12 monthly).
+        Sampling frequency if dates are not provided.
+    start_date : datetime-like, optional
+        The actual start date of the backtest.
+    end_date : datetime-like, optional
+        The actual end date of the backtest.
 
     Returns
     -----
@@ -40,14 +60,18 @@ def sharpe_ratio(returns: pd.Series, periods_per_year: int = 252) -> float:
     mean_return = returns.mean()
     std_return = returns.std()
 
-    if std_return == 0:
+    if std_return == 0 or pd.isna(std_return):
         return np.nan
 
-    sharpe = (mean_return / std_return) * np.sqrt(periods_per_year)
+    # If dates are provided, we compute the real frequency (trades per year)
+    years = _get_years(len(returns), periods_per_year, start_date, end_date, days_in_year=days_in_year)
+    annualization_factor = np.sqrt(len(returns) / years)
+    
+    sharpe = (mean_return / std_return) * annualization_factor
     return sharpe
 
 
-def cagr(equity_curve: pd.Series, periods_per_year: int = 252) -> float:
+def cagr(equity_curve: pd.Series, periods_per_year: int = 252, start_date=None, end_date=None, days_in_year: float = 365.25) -> float:
     """
     Compute CAGR (Compound Annual Growth Rate).
 
@@ -56,16 +80,18 @@ def cagr(equity_curve: pd.Series, periods_per_year: int = 252) -> float:
     equity_curve : pd.Series
         Series of cumulative portfolio values.
     periods_per_year : int
-        Number of periods in one year.
+        Number of periods in one year (fallback if dates missing).
+    start_date : datetime-like, optional
+        The actual start date of the backtest.
+    end_date : datetime-like, optional
+        The actual end date of the backtest.
 
     Returns
     -----
     float
         CAGR value.
     """
-    total_periods = len(equity_curve)
-
-    if total_periods <= 1:
+    if len(equity_curve) <= 1:
         return np.nan
 
     start = equity_curve.iloc[0]
@@ -74,7 +100,7 @@ def cagr(equity_curve: pd.Series, periods_per_year: int = 252) -> float:
     if start <= 0:
         return np.nan # Cannot calculate CAGR on a portfolio that blows up starting Capital
         
-    years = total_periods / periods_per_year
+    years = _get_years(len(equity_curve) - 1, periods_per_year, start_date, end_date, days_in_year=days_in_year)
     cagr_value = (end / start) ** (1 / years) - 1
     return cagr_value
 
@@ -99,21 +125,31 @@ def cumulative_return(returns: pd.Series) -> pd.Series:
         cum_factor *= (1 + p)
         cum_factors.append(cum_factor)
 
-    return pd.Series(cum_factors, index=returns.index.insert(0, returns.index[0] if len(returns) > 0 else 0) if isinstance(returns.index, pd.DatetimeIndex) else None)
+    # Maintain original index if possible, otherwise auto-increment
+    if isinstance(returns.index, pd.DatetimeIndex):
+        new_index = returns.index.insert(0, returns.index[0] - pd.Timedelta(seconds=1))
+    else:
+        new_index = None
+        
+    return pd.Series(cum_factors, index=new_index)
 
 
-def sortino_ratio(returns: pd.Series, periods_per_year: int = 252, target_return: float = 0.0) -> float:
+def sortino_ratio(returns: pd.Series, periods_per_year: int = 252, target_return: float = 0.0, start_date=None, end_date=None, days_in_year: float = 365.25) -> float:
     """
     Compute the annualized Sortino Ratio.
 
     Parameters
     -----
     returns : pd.Series
-        Series of periodic returns.
+        Series of periodic returns (or trade returns).
     periods_per_year : int
-        Sampling frequency (252 daily, 52 weekly, 12 monthly).
+        Sampling frequency if dates are not provided.
     target_return : float
         Minimum acceptable return (MAR). Usually set to 0.
+    start_date : datetime-like, optional
+        The actual start date of the backtest.
+    end_date : datetime-like, optional
+        The actual end date of the backtest.
 
     Returns
     -----
@@ -127,10 +163,13 @@ def sortino_ratio(returns: pd.Series, periods_per_year: int = 252, target_return
         return np.nan # No downside volatility
         
     downside_std = downside_returns.std()
-    if downside_std == 0:
+    if downside_std == 0 or pd.isna(downside_std):
         return np.nan
         
-    sortino = ((mean_return - target_return) / downside_std) * np.sqrt(periods_per_year)
+    years = _get_years(len(returns), periods_per_year, start_date, end_date, days_in_year=days_in_year)
+    annualization_factor = np.sqrt(len(returns) / years)
+    
+    sortino = ((mean_return - target_return) / downside_std) * annualization_factor
     return sortino
 
 def calmar_ratio(cagr_val: float, mdd: float) -> float:

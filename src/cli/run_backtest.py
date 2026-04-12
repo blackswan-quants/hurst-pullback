@@ -122,7 +122,7 @@ def main() -> None:
     parser.add_argument(
         "--asset", "-a", 
         type=str, 
-        default="ES", 
+        default="EMD", 
         help=f"Ticker symbol to backtest. Available: {', '.join(available_assets)}"
     )
     args = parser.parse_args()

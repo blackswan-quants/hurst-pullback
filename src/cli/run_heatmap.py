@@ -25,7 +25,7 @@ def main():
     with open(config_path, 'r') as f:
         base_config = yaml.safe_load(f)
         
-    data_path = project_root / "data" / "raw" / "ES.csv"
+    data_path = project_root / "data" / "raw" / "EMD.csv"
     df = pd.read_csv(data_path)
     
     # Pre-calculate base indicators

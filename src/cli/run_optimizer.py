@@ -193,7 +193,7 @@ def main():
         return
 
     # 2. Data Loading
-    data_path = project_root / "data" / "raw" / "NQ.csv"
+    data_path = project_root / "data" / "raw" / "YM.csv"
     try:
         df_full = pd.read_csv(data_path)
     except Exception as e:

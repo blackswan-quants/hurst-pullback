@@ -32,7 +32,7 @@ def main() -> None:
         config = yaml.safe_load(f)
 
     # Use the synchronized raw data for ES
-    data_path = project_root / "data" / "raw" / "ES.csv"
+    data_path = project_root / "data" / "raw" / "EMD.csv"
     try:
         df = pd.read_csv(data_path)
     except Exception as e:

@@ -119,7 +119,9 @@ def vectorized_run(df, params, drag=0.5, start_date=None, end_date=None):
     
     t_df = pd.DataFrame(trades)
     eq = metrics.cumulative_return(t_df['profit'])
-    sharpe = metrics.sharpe_ratio(t_df['profit'], start_date=start_date, end_date=end_date)
+    # Sharpe needs periodic returns, but for optimization we can use Sharpe of trade returns 
+    # as a proxy or interpolate back to daily. For speed, just use trade Sharpe.
+    sharpe = metrics.sharpe_ratio(t_df['profit'])
     
     # Return full result for OOS stitching
     return {
@@ -132,8 +134,7 @@ def vectorized_run(df, params, drag=0.5, start_date=None, end_date=None):
 def optimize_on_is(is_data, param_grid, objective="sharpe"):
     """Step 3 - The inner loop: optimize on IS"""
     best_params, best_score = None, -np.inf
-    
-    # Extract dates for IS scaling
+
     try:
         if 'Date' in is_data.columns and 'Time' in is_data.columns:
             is_start = pd.to_datetime(is_data.iloc[0]['Date'] + ' ' + is_data.iloc[0]['Time'])
@@ -145,8 +146,9 @@ def optimize_on_is(is_data, param_grid, objective="sharpe"):
             is_start, is_end = None, None
     except Exception:
         is_start, is_end = None, None
-
+    
     # Pre-calculate all Indicators for this IS fold once
+    # This saves massive time vs calculating inside the grid loop
     is_data = is_data.copy()
     # Note: Using hardcoded common windows to avoid recalculating per grid point
     # but since hurst_window varies in user's grid, we might need to handle it.
@@ -207,7 +209,7 @@ def main():
     
     # Load Data
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / "data" / "raw" / "ES.csv"
+    data_path = project_root / "data" / "raw" / "EMD.csv"
     df_full = pd.read_csv(data_path)
     
     # Load Config for default thresholds
@@ -261,7 +263,7 @@ def main():
             oos_start, oos_end = None, None
 
         oos_result = vectorized_run(oos_data, best_params, start_date=oos_start, end_date=oos_end)
-        
+                
         oos_results.append({
             "fold": i + 1,
             "params": best_params,
@@ -272,7 +274,7 @@ def main():
             "oos_equity": oos_result["equity"],
         })
         print(f"  Best Params: {best_params}")
-        print(f"  IS Sharpe: {is_score:.2f} | OOS Sharpe: {oos_result['sharpe']:.2f} ({len(oos_result['trades'])} trades)")
+        print(f"  IS Sharpe: {is_score:.2f} | OOS Profit: {oos_result['profit']:.2f} ({len(oos_result['trades'])} trades)")
 
     # Step 5 - Stitch the OOS equity curve
     # Need to handle cumulative multiplier for stitching
@@ -318,7 +320,7 @@ def main():
     width = 0.35
     ax2.bar(x - width/2, is_sharpes, width, label='IS Sharpe', color='#10b981', alpha=0.7)
     ax2.bar(x + width/2, oos_sharpes, width, label='OOS Sharpe', color='#ef4444', alpha=0.7)
-    ax2.set_title("IS vs OOS Sharpe per Fold")
+    ax2.set_title("IS vs OOS Profit per Fold")
     ax2.set_xticks(x)
     ax2.set_xticklabels([f"F{i+1}" for i in x])
     ax2.legend()
